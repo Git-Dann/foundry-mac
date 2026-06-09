@@ -192,6 +192,19 @@ extension FoundryAPIClient {
         if let tier { items.append(.init(name: "tier", value: tier.rawValue)) }
         return try await send(makeRequest("api/codeclear/candidates", query: items))
     }
+
+    func getCandidate(id: String) async throws -> CandidateDetail {
+        let response: CandidateDetailResponse = try await send(makeRequest("api/codeclear/candidates/\(id)"))
+        return response.candidate
+    }
+
+    @discardableResult
+    func addCandidateNote(id: String, body text: String) async throws -> CodeClearNote {
+        struct Body: Encodable { let body: String }
+        let payload = try encode(Body(body: text))
+        let response: CodeClearNoteResponse = try await send(makeRequest("api/codeclear/candidates/\(id)/notes", method: "POST", body: payload))
+        return response.note
+    }
 }
 
 // MARK: - AI cost (Super-Admin)
