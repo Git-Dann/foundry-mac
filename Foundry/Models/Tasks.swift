@@ -329,6 +329,7 @@ struct WorkspaceMember: Decodable, Sendable, Identifiable {
     let id: String
     let userId: String
     let role: String
+    let permissions: [String]?
     let user: UserRef
 
     struct UserRef: Decodable, Sendable {
@@ -338,4 +339,13 @@ struct WorkspaceMember: Decodable, Sendable, Identifiable {
     }
 
     var displayName: String { user.name?.nilIfEmpty ?? user.email }
+    var roleLabel: String {
+        switch role {
+        case "SUPER_ADMIN": return "Super Admin"
+        case "ADMIN": return "Admin"
+        case "STAFF": return "Staff"
+        case "DEVELOPER": return "Developer"
+        default: return role.capitalized
+        }
+    }
 }

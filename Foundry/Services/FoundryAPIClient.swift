@@ -548,3 +548,20 @@ extension FoundryAPIClient {
         return try await send(makeRequest("api/backstage/expenses/\(id)/review", method: "POST", body: try encode(Body(status: status.rawValue, note: note))))
     }
 }
+
+// MARK: - Settings + Team
+
+extension FoundryAPIClient {
+    /// Workspace AI-provider config (Admin-only; a throw means "not permitted / unavailable").
+    func settingsIntegrations() async throws -> SettingsIntegrations {
+        try await send(makeRequest("api/settings/integrations"))
+    }
+
+    func updateIntegrations(_ input: IntegrationsUpdate) async throws {
+        try await sendNoContent(makeRequest("api/settings/integrations", method: "PUT", body: try encode(input)))
+    }
+
+    func updateMemberRole(memberId: String, role: String) async throws {
+        try await sendNoContent(makeRequest("api/team/members/\(memberId)", method: "PATCH", body: try encode(["role": role])))
+    }
+}

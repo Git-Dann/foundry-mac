@@ -23,8 +23,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.6.0"
-    CURRENT_PROJECT_VERSION: "11"
+    MARKETING_VERSION: "0.6.1"
+    CURRENT_PROJECT_VERSION: "12"
     PRODUCT_BUNDLE_IDENTIFIER: co.gitwork.foundry
     # Leave the team blank for unsigned/ad-hoc local builds. Set DEVELOPMENT_TEAM
     # (and a Developer ID identity) in CI / a local override to produce a signed build.
