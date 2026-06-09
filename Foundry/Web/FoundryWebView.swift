@@ -15,6 +15,9 @@ struct FoundryWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        // Persist cookies/session in the shared default store so a single in-pane Foundry login
+        // sticks across every embedded module and across app launches (no repeated sign-in).
+        configuration.websiteDataStore = .default()
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true

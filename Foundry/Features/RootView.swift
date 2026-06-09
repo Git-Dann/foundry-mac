@@ -1,22 +1,45 @@
 import SwiftUI
 
-/// Top-level sidebar destinations. Order matches the brief.
+/// Sidebar groupings. Order is top-to-bottom in the sidebar.
+enum SidebarSection: String, CaseIterable, Identifiable {
+    case workspace = "Workspace"
+    case delivery = "Delivery"
+    case operations = "Operations"
+    case admin = "Admin"
+
+    var id: String { rawValue }
+}
+
+/// Every Foundry module, reachable from the Mac sidebar. Native modules render a native view;
+/// the rest open the hosted screen in the controlled WebKit pane (`webDestination`) until they're
+/// rebuilt natively in a later phase. Calendar gets its own window (added in a later version),
+/// so it is not a sidebar item.
 enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     case dashboard
-    case proposals
-    case clients
-    case codeclear
+    case pulse
+    case proposals   // "Docs"
+    case clients     // "Portal"
+    case care
+    case study
+    case codeclear   // "Code"
+    case backstage
     case rateCard
+    case settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .dashboard: return "Dashboard"
-        case .proposals: return "Proposals"
-        case .clients: return "Clients"
-        case .codeclear: return "CodeClear"
+        case .pulse: return "Pulse"
+        case .proposals: return "Docs"
+        case .clients: return "Portal"
+        case .care: return "Care"
+        case .study: return "Study"
+        case .codeclear: return "Code"
+        case .backstage: return "Backstage"
         case .rateCard: return "Rate Card"
+        case .settings: return "Settings"
         }
     }
 
@@ -24,11 +47,42 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     var systemImage: String {
         switch self {
         case .dashboard: return "square.grid.2x2"
+        case .pulse: return "waveform.path.ecg"
         case .proposals: return "doc.text"
         case .clients: return "building.2"
+        case .care: return "bubble.left.and.bubble.right"
+        case .study: return "person.3.sequence"
         case .codeclear: return "chevron.left.forwardslash.chevron.right"
-        case .rateCard: return "person.2.badge.gearshape"
+        case .backstage: return "briefcase"
+        case .rateCard: return "sterlingsign.circle"
+        case .settings: return "gearshape"
         }
+    }
+
+    var section: SidebarSection {
+        switch self {
+        case .dashboard: return .workspace
+        case .pulse, .proposals, .clients, .care, .study, .codeclear: return .delivery
+        case .backstage, .rateCard: return .operations
+        case .settings: return .admin
+        }
+    }
+
+    /// Non-nil for modules not yet rebuilt natively — they open in the in-app WebKit pane.
+    /// `nil` means a native SwiftUI screen handles this module (see `DetailColumn`).
+    var webDestination: WebDestination? {
+        switch self {
+        case .pulse: return .pulse
+        case .care: return .care
+        case .study: return .study
+        case .backstage: return .backstage
+        case .settings: return .workspaceSettings
+        case .dashboard, .proposals, .clients, .codeclear, .rateCard: return nil
+        }
+    }
+
+    static func items(in section: SidebarSection) -> [SidebarItem] {
+        allCases.filter { $0.section == section }
     }
 }
 
@@ -58,9 +112,15 @@ private struct SidebarView: View {
     @Binding var selection: SidebarItem?
 
     var body: some View {
-        List(SidebarItem.allCases, selection: $selection) { item in
-            Label(item.title, systemImage: item.systemImage)
-                .tag(item)
+        List(selection: $selection) {
+            ForEach(SidebarSection.allCases) { section in
+                Section(section.rawValue) {
+                    ForEach(SidebarItem.items(in: section)) { item in
+                        Label(item.title, systemImage: item.systemImage)
+                            .tag(item)
+                    }
+                }
+            }
         }
         .navigationSplitViewColumnWidth(min: 200, ideal: 232, max: 320)
         .navigationTitle("Foundry")
@@ -68,7 +128,8 @@ private struct SidebarView: View {
 }
 
 /// Hosts the selected feature inside a `NavigationStack` (for list → detail push) and applies
-/// the shared toolbar chrome.
+/// the shared toolbar chrome. Native modules render their SwiftUI view; everything else opens
+/// the hosted screen in the controlled WebKit pane.
 private struct DetailColumn: View {
     @Environment(AppModel.self) private var model
     let selection: SidebarItem?
@@ -78,6 +139,9 @@ private struct DetailColumn: View {
             content
                 .toolbar { FoundryToolbar(model: model) }
         }
+        // Re-create the pane when the module changes so each gets a clean NavigationStack
+        // (and the WebKit pane reloads its route rather than animating a push).
+        .id(selection)
     }
 
     @ViewBuilder
@@ -90,6 +154,12 @@ private struct DetailColumn: View {
         case .rateCard: RateCardView()
         case .none:
             ContentUnavailableView("Select a section", systemImage: "sidebar.left")
+        default:
+            if let destination = selection?.webDestination {
+                FoundryWebScreen(destination: destination)
+            } else {
+                ContentUnavailableView("Select a section", systemImage: "sidebar.left")
+            }
         }
     }
 }

@@ -47,6 +47,14 @@ struct FoundryApp: App {
         }
         .defaultSize(width: 1120, height: 780)
 
+        // Menu-bar quick glance — runs in-process so the AI-spend figures are live (no App Group
+        // needed, unlike the WidgetKit widgets which require a signed build to share data).
+        MenuBarExtra("Foundry", systemImage: "hammer.fill") {
+            MenuBarContent(checkForUpdates: { updates.checkForUpdates() })
+                .environment(model)
+        }
+        .menuBarExtraStyle(.window)
+
         Settings {
             FoundrySettingsView()
                 .environment(model)

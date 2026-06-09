@@ -193,3 +193,14 @@ extension FoundryAPIClient {
         return try await send(makeRequest("api/codeclear/candidates", query: items))
     }
 }
+
+// MARK: - AI cost (Super-Admin)
+
+extension FoundryAPIClient {
+    /// Real billed AI spend (today + month-to-date). The route is Super-Admin-only, so a 403
+    /// (or any throw) means "spend unavailable on this account" — callers surface nothing rather
+    /// than an error. No per-module/token breakdown yet (top-line spend only).
+    func aiCost() async throws -> AiCostSummary {
+        try await send(makeRequest("api/admin/ai-cost"))
+    }
+}

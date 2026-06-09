@@ -7,7 +7,10 @@ struct DashboardView: View {
     @State private var proposals: [ProposalListItem] = []
     @State private var clientsCount: Int?
     @State private var stats: CodeClearStats?
+    @State private var aiCost: AiCostSummary?
     @State private var state: LoadState<Void> = .idle
+
+    private var isSuperAdmin: Bool { model.auth.currentUser?.role == "SUPER_ADMIN" }
 
     private let columns = [GridItem(.adaptive(minimum: 180), spacing: 16)]
 
@@ -31,6 +34,10 @@ struct DashboardView: View {
                     if let user = model.auth.currentUser {
                         Text("Welcome back, \(user.displayName.components(separatedBy: " ").first ?? user.displayName)")
                             .font(.title2.weight(.semibold))
+                    }
+
+                    if isSuperAdmin, let aiCost, aiCost.configured {
+                        AiSpendCard(summary: aiCost)
                     }
 
                     LazyVGrid(columns: columns, spacing: 16) {
@@ -87,6 +94,68 @@ struct DashboardView: View {
             model.lastRefresh = Date()
         } catch {
             state = .failed(error.userMessage)
+        }
+        // Best-effort AI spend (Super-Admin only). Never affects the main dashboard state — a 403
+        // (non-super-admin) or any failure just leaves the card hidden.
+        if isSuperAdmin {
+            aiCost = try? await model.api.aiCost()
+        }
+    }
+}
+
+/// Today + month-to-date billed AI spend, with a per-provider breakdown. Super-Admin only;
+/// hidden entirely when spend is unavailable. Plain card — no glass (system chrome only).
+private struct AiSpendCard: View {
+    let summary: AiCostSummary
+
+    private var currencyCode: String { summary.commonCurrency ?? "USD" }
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles").foregroundStyle(Color.foundryPurple)
+                    Text("AI SPEND").font(.caption.monospaced()).foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Super Admin").font(.caption2).foregroundStyle(.tertiary)
+                }
+                HStack(alignment: .top, spacing: 32) {
+                    stat("Today", summary.totalToday)
+                    stat("This month", summary.totalMonthToDate)
+                    Spacer()
+                }
+                if summary.providers.count > 1 || summary.providers.contains(where: { $0.status != .ok }) {
+                    Divider()
+                    ForEach(summary.providers) { provider in
+                        HStack {
+                            Text(provider.providerLabel).font(.callout)
+                            if let model = provider.modelLabel, !model.isEmpty {
+                                Text(model).font(.caption).foregroundStyle(.tertiary)
+                            }
+                            Spacer()
+                            switch provider.status {
+                            case .ok:
+                                Text(Formatters.currency(provider.monthToDate, code: provider.currency))
+                                    .monospacedDigit()
+                            case .notConfigured:
+                                Text("Not set up").font(.caption).foregroundStyle(.tertiary)
+                            case .error, .unknown:
+                                Text("Unavailable").font(.caption).foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(6)
+        }
+    }
+
+    private func stat(_ label: String, _ amount: Double) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(Formatters.currency(amount, code: currencyCode))
+                .font(.system(size: 28, weight: .semibold, design: .rounded)).monospacedDigit()
+            Text(label).font(.caption).foregroundStyle(.secondary)
         }
     }
 }

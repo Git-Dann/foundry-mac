@@ -82,4 +82,32 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(stats.byStatus.first?.status, .placed)
         XCTAssertEqual(stats.recheckDue, 2)
     }
+
+    func testAiCostSummaryDecodes() throws {
+        let json = """
+        {"providers":[
+          {"provider":"ANTHROPIC","status":"ok","today":1.5,"monthToDate":42,"currency":"USD","modelLabel":"Claude"},
+          {"provider":"OPENAI","status":"not_configured","today":0,"monthToDate":0,"currency":"USD","modelLabel":null}
+        ],"configured":true,"fetchedAt":"2026-06-09T08:33:00.000Z"}
+        """
+        let summary = try decode(AiCostSummary.self, json)
+        XCTAssertTrue(summary.configured)
+        XCTAssertEqual(summary.providers.count, 2)
+        XCTAssertEqual(summary.providers[0].provider, .anthropic)
+        XCTAssertEqual(summary.providers[0].status, .ok)
+        XCTAssertEqual(summary.totalToday, 1.5, accuracy: 0.0001)
+        XCTAssertEqual(summary.totalMonthToDate, 42, accuracy: 0.0001)
+        XCTAssertEqual(summary.providers[1].status, .notConfigured)
+        XCTAssertEqual(summary.commonCurrency, "USD")
+    }
+
+    func testAiCostUnknownProviderAndStatusFallBack() throws {
+        let json = """
+        {"providers":[{"provider":"GEMINI","status":"throttled","today":0,"monthToDate":3,"currency":"USD","modelLabel":null}],
+        "configured":true,"fetchedAt":"2026-06-09T08:33:00Z"}
+        """
+        let summary = try decode(AiCostSummary.self, json)
+        XCTAssertEqual(summary.providers[0].provider, .unknown)
+        XCTAssertEqual(summary.providers[0].status, .unknown)
+    }
 }
