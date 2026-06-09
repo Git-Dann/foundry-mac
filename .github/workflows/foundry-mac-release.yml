@@ -98,9 +98,20 @@ jobs:
             dist/*.sha256
             dist/appcast.xml
 
+      # Point the web app's /download page at this release (opens a PR on the web repo).
+      # Needs a cross-repo PAT — the default GITHUB_TOKEN can't write to docs-by-gitwork.
+      - name: Update web /download page (open PR)
+        if: ${{ startsWith(github.ref, 'refs/tags/mac-v') && secrets.DOCS_REPO_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_REPO_TOKEN }}
+          WEB_REPO: Git-Dann/docs-by-gitwork
+        run: Scripts/update-download-page.sh
+
 # Required repo secrets (all optional — absent ⇒ unsigned internal build):
 #   APPLE_TEAM_ID
 #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD                  (notarization via Apple ID)
 #   DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64            (base64 of the .p12)
 #   DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD
 #   SPARKLE_EDDSA_PRIVATE_KEY                              (NEVER commit this; CI-only)
+#   DOCS_REPO_TOKEN   PAT with `repo` scope on Git-Dann/docs-by-gitwork — lets the release
+#                     open the /download-update PR on the web repo (optional; absent ⇒ skipped).

@@ -31,3 +31,8 @@ else
   gh release create "$TAG" "${ASSETS[@]}" --title "Foundry $VERSION" --notes-file "$NOTES"
 fi
 echo "✓ Published $TAG. Sparkle clients will pick up appcast.xml on their next check."
+
+# Point the web app's /download page at this release (opens a PR on the web repo).
+echo "▸ Updating the web /download page…"
+"$ROOT/Scripts/update-download-page.sh" \
+  || echo "  ⚠ /download not updated — run Scripts/update-download-page.sh (needs gh write access to the web repo)."

@@ -57,6 +57,24 @@ up on their next check.
 > The private key comes from the Keychain locally, or from `SPARKLE_EDDSA_PRIVATE_KEY` in CI
 > (the script writes it to a temp file and passes `--ed-key-file`).
 
+## Keeping the web /download page current
+
+`publish-update.sh` finishes by calling **`Scripts/update-download-page.sh`**, which writes
+`public/desktop/latest-mac.json` in the **web repo** (`Git-Dann/docs-by-gitwork`) — version,
+build, the release DMG URL, sha256, notarized flag — and **opens a PR** there via the GitHub
+Contents API (no clone). Merge it → Vercel redeploys → `foundry.gitwork.co.uk/download` shows the
+new build. No hand-editing of the metadata.
+
+- **Local:** runs automatically inside `publish-update.sh` (needs `gh` with write access to the
+  web repo). Run it standalone any time with `Scripts/update-download-page.sh`.
+- **CI:** the release workflow runs it on `mac-v*` tags when the **`DOCS_REPO_TOKEN`** secret is
+  set (a PAT with `repo` scope on the web repo — the default `GITHUB_TOKEN` can't write to another
+  repo). Absent ⇒ the step is skipped.
+- **Options:** `DIRECT=1` commits straight to the web repo's `main` (auto-deploys, no PR);
+  `DRY_RUN=1` prints the JSON without making changes.
+
+Updates installed *inside* the app still come from Sparkle — `/download` is first-install only.
+
 ## Update hosting
 
 Default: **GitHub Releases** on the Mac repo. `SUFeedURL` →
