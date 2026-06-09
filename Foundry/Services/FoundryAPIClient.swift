@@ -416,3 +416,72 @@ extension FoundryAPIClient {
         return response.meeting
     }
 }
+
+// MARK: - Care (support)
+
+extension FoundryAPIClient {
+    func listSupportClients() async throws -> [SupportClient] {
+        let response: SupportClientsResponse = try await send(makeRequest("api/support/clients"))
+        return response.clients
+    }
+
+    func supportDashboard() async throws -> SupportDashboard {
+        try await send(makeRequest("api/support/dashboard"))
+    }
+
+    func listSupportConversations(clientId: String) async throws -> [SupportConversation] {
+        let response: SupportConversationsResponse = try await send(makeRequest("api/support/clients/\(clientId)/conversations"))
+        return response.conversations
+    }
+
+    func listSupportMessages(clientId: String, conversationId: String) async throws -> [SupportMessage] {
+        let response: SupportMessagesResponse = try await send(makeRequest("api/support/clients/\(clientId)/conversations/\(conversationId)/messages"))
+        return response.messages
+    }
+
+    @discardableResult
+    func sendSupportMessage(clientId: String, conversationId: String, authorLabel: String, body text: String) async throws -> SupportMessage {
+        struct Body: Encodable { let direction: String; let authorLabel: String; let body: String }
+        let payload = try encode(Body(direction: "outbound", authorLabel: authorLabel, body: text))
+        let response: SupportMessageResponse = try await send(makeRequest("api/support/clients/\(clientId)/conversations/\(conversationId)/messages", method: "POST", body: payload))
+        return response.message
+    }
+
+    func supportAIDraft(clientId: String, conversationId: String) async throws -> String {
+        let response: SupportDraftResponse = try await send(makeRequest("api/support/clients/\(clientId)/conversations/\(conversationId)/ai-draft", method: "POST"))
+        return response.draft
+    }
+
+    func listSupportTickets(clientId: String) async throws -> [SupportTicket] {
+        let response: SupportTicketsResponse = try await send(makeRequest("api/support/clients/\(clientId)/tickets"))
+        return response.tickets
+    }
+
+    @discardableResult
+    func updateSupportTicket(clientId: String, ticketId: String, status: TicketStatus) async throws -> SupportTicket {
+        let payload = try encode(["status": status.rawValue])
+        let response: SupportTicketResponse = try await send(makeRequest("api/support/clients/\(clientId)/tickets/\(ticketId)", method: "PATCH", body: payload))
+        return response.ticket
+    }
+
+    func listSupportDraftActions(clientId: String) async throws -> [SupportDraftAction] {
+        let response: SupportDraftActionsResponse = try await send(makeRequest("api/support/clients/\(clientId)/draft-actions"))
+        return response.draftActions
+    }
+
+    @discardableResult
+    func updateSupportDraftAction(clientId: String, draftId: String, status: DraftActionStatus) async throws -> SupportDraftAction {
+        let payload = try encode(["status": status.rawValue])
+        let response: SupportDraftActionResponse = try await send(makeRequest("api/support/clients/\(clientId)/draft-actions/\(draftId)", method: "PATCH", body: payload))
+        return response.draftAction
+    }
+
+    func supportAnalytics(clientId: String, month: String) async throws -> SupportAnalyticsSnapshot {
+        try await send(makeRequest("api/support/clients/\(clientId)/analytics", query: [.init(name: "month", value: month)]))
+    }
+
+    func supportAuditLogs(clientId: String) async throws -> [SupportAuditLog] {
+        let response: SupportAuditLogsResponse = try await send(makeRequest("api/support/clients/\(clientId)/audit-logs"))
+        return response.logs
+    }
+}

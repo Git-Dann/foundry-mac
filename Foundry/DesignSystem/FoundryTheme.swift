@@ -124,6 +124,40 @@ extension TaskPriority {
     }
 }
 
+extension TicketStatus {
+    var tint: Color {
+        switch self {
+        case .open: return .blue
+        case .inProgress: return .orange
+        case .devReview: return .purple
+        case .awaitingCustomer: return .yellow
+        case .resolved: return .green
+        case .unknown: return .secondary
+        }
+    }
+}
+
+extension TicketPriority {
+    var tint: Color {
+        switch self {
+        case .urgent: return .red
+        case .high: return .orange
+        case .normal: return .blue
+        case .low, .unknown: return .secondary
+        }
+    }
+}
+
+extension ConversationSentiment {
+    var tint: Color {
+        switch self {
+        case .positive: return .green
+        case .neutral, .unknown: return .secondary
+        case .negative: return .red
+        }
+    }
+}
+
 /// Small, reusable status chip. A plain rounded capsule with a tinted label — NOT a glass
 /// surface (glass is reserved for system chrome).
 struct StatusChip: View {
