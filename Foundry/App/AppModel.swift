@@ -11,6 +11,7 @@ final class AppModel {
     let auth: AuthStore
     let api: FoundryAPIClient
     let network: NetworkMonitor
+    let google: GoogleAuthStore
 
     var selection: SidebarItem? = .dashboard
     var lastRefresh: Date?
@@ -28,6 +29,7 @@ final class AppModel {
         self.auth = auth
         self.api = FoundryAPIClient(environment: environment, auth: auth)
         self.network = NetworkMonitor()
+        self.google = GoogleAuthStore()
     }
 
     func requestRefresh() {

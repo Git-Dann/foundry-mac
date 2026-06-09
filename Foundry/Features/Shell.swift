@@ -4,6 +4,7 @@ import SwiftUI
 /// indicator, and the account menu. The toolbar surface itself is system Liquid Glass.
 struct FoundryToolbar: ToolbarContent {
     let model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
@@ -21,6 +22,14 @@ struct FoundryToolbar: ToolbarContent {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
             .help("Refresh (⌘R)")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                openWindow(id: "calendar")
+            } label: {
+                Label("Calendar", systemImage: "calendar")
+            }
+            .help("Open Calendar")
         }
         ToolbarItem(placement: .primaryAction) {
             SyncStatusView()

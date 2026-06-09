@@ -9,6 +9,7 @@ import AppKit
 /// endpoint predating the mobile-JWT change) simply hides the spend block — never an error.
 struct MenuBarContent: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     var checkForUpdates: (() -> Void)?
 
     @State private var cost: AiCostSummary?
@@ -85,6 +86,10 @@ struct MenuBarContent: View {
                 model.requestNewProposal()
             }
             menuButton("Open Foundry Web", systemImage: "safari") { model.openWeb() }
+            menuButton("Open Calendar", systemImage: "calendar") {
+                NSApp.activate(ignoringOtherApps: true)
+                openWindow(id: "calendar")
+            }
             if let checkForUpdates {
                 menuButton("Check for Updates…", systemImage: "arrow.down.circle") { checkForUpdates() }
             }

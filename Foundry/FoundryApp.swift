@@ -47,6 +47,12 @@ struct FoundryApp: App {
         }
         .defaultSize(width: 1120, height: 780)
 
+        // Calendar — its own window (two-way Google), opened from the toolbar / menu bar.
+        WindowGroup("Calendar", id: "calendar") {
+            CalendarWindow().environment(model)
+        }
+        .defaultSize(width: 820, height: 680)
+
         // Menu-bar quick glance — runs in-process so the AI-spend figures are live (no App Group
         // needed, unlike the WidgetKit widgets which require a signed build to share data).
         MenuBarExtra("Foundry", systemImage: "hammer.fill") {
