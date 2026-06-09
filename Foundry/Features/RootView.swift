@@ -1,84 +1,73 @@
 import SwiftUI
 
-/// Sidebar groupings. Order is top-to-bottom in the sidebar.
-enum SidebarSection: String, CaseIterable, Identifiable {
-    case workspace = "Workspace"
-    case delivery = "Delivery"
-    case operations = "Operations"
-    case admin = "Admin"
-
-    var id: String { rawValue }
-}
-
-/// Every Foundry module, reachable from the Mac sidebar. Native modules render a native view;
-/// the rest open the hosted screen in the controlled WebKit pane (`webDestination`) until they're
-/// rebuilt natively in a later phase. Calendar gets its own window (added in a later version),
-/// so it is not a sidebar item.
+/// Every Foundry module, in the same order + naming as the web sidebar. Native modules render a
+/// native view; Study (heavy multi-agent) opens the hosted screen in the controlled WebKit pane.
+/// Settings is pinned to the sidebar footer (with the account), not in the scrolling list.
 enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
-    case dashboard
+    case dashboard   // "Foundry HQ"
     case pulse
+    case codeclear   // "Code"
     case proposals   // "Docs"
     case clients     // "Portal"
     case care
     case study
-    case codeclear   // "Code"
     case backstage
-    case rateCard
     case settings
 
     var id: String { rawValue }
 
+    /// The modules shown in the main scrolling list (Settings lives in the footer).
+    static let primary: [SidebarItem] = [.dashboard, .pulse, .codeclear, .proposals, .clients, .care, .study, .backstage]
+
     var title: String {
         switch self {
-        case .dashboard: return "Dashboard"
+        case .dashboard: return "Foundry HQ"
         case .pulse: return "Pulse"
+        case .codeclear: return "Code"
         case .proposals: return "Docs"
         case .clients: return "Portal"
         case .care: return "Care"
         case .study: return "Study"
-        case .codeclear: return "Code"
         case .backstage: return "Backstage"
-        case .rateCard: return "Rate Card"
         case .settings: return "Settings"
         }
     }
 
-    /// SF Symbols — native iconography, no custom assets needed.
+    var subtitle: String? {
+        switch self {
+        case .dashboard: return nil
+        case .pulse: return "Health and delivery tracking"
+        case .codeclear: return "Dev review and validation"
+        case .proposals: return "Proposals, SLAs, SOWs and other documents"
+        case .clients: return "Client management"
+        case .care: return "Support and aftercare"
+        case .study: return "AI-powered user research"
+        case .backstage: return "Internal team ops — leave, expenses, availability"
+        case .settings: return nil
+        }
+    }
+
+    /// SF Symbols chosen to mirror the web sidebar's iconography.
     var systemImage: String {
         switch self {
-        case .dashboard: return "square.grid.2x2"
-        case .pulse: return "waveform.path.ecg"
-        case .proposals: return "doc.text"
-        case .clients: return "building.2"
-        case .care: return "bubble.left.and.bubble.right"
-        case .study: return "person.3.sequence"
+        case .dashboard: return "building.2"
+        case .pulse: return "dot.radiowaves.left.and.right"
         case .codeclear: return "chevron.left.forwardslash.chevron.right"
-        case .backstage: return "briefcase"
-        case .rateCard: return "sterlingsign.circle"
+        case .proposals: return "doc.text"
+        case .clients: return "person.3"
+        case .care: return "lifepreserver"
+        case .study: return "graduationcap"
+        case .backstage: return "wrench.and.screwdriver"
         case .settings: return "gearshape"
         }
     }
 
-    var section: SidebarSection {
-        switch self {
-        case .dashboard: return .workspace
-        case .pulse, .proposals, .clients, .care, .study, .codeclear: return .delivery
-        case .backstage, .rateCard: return .operations
-        case .settings: return .admin
-        }
-    }
-
-    /// Non-nil for modules not yet rebuilt natively — they open in the in-app WebKit pane.
-    /// `nil` means a native SwiftUI screen handles this module (see `DetailColumn`).
+    /// Non-nil only for modules rendered in the WebKit pane (Study). Everything else is native.
     var webDestination: WebDestination? {
         switch self {
         case .study: return .study
-        case .dashboard, .pulse, .proposals, .clients, .care, .codeclear, .backstage, .rateCard, .settings: return nil
+        default: return nil
         }
-    }
-
-    static func items(in section: SidebarSection) -> [SidebarItem] {
-        allCases.filter { $0.section == section }
     }
 }
 
@@ -105,27 +94,104 @@ struct RootView: View {
 }
 
 private struct SidebarView: View {
+    @Environment(AppModel.self) private var model
     @Binding var selection: SidebarItem?
 
     var body: some View {
         List(selection: $selection) {
-            ForEach(SidebarSection.allCases) { section in
-                Section(section.rawValue) {
-                    ForEach(SidebarItem.items(in: section)) { item in
-                        Label(item.title, systemImage: item.systemImage)
-                            .tag(item)
-                    }
-                }
+            ForEach(SidebarItem.primary) { item in
+                SidebarRow(item: item).tag(item)
             }
         }
-        .navigationSplitViewColumnWidth(min: 200, ideal: 232, max: 320)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 252, max: 340)
         .navigationTitle("Foundry")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                Button { selection = .settings } label: {
+                    SidebarRow(item: .settings)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .background(
+                            selection == .settings ? Color.accentColor.opacity(0.15) : .clear,
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+
+                SidebarAccountFooter()
+                    .padding(10)
+            }
+            .background(.bar)
+        }
+    }
+}
+
+/// A sidebar row: icon + title with an optional grey subtitle (mirrors the web).
+private struct SidebarRow: View {
+    let item: SidebarItem
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title)
+                if let subtitle = item.subtitle {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        } icon: {
+            Image(systemName: item.systemImage)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// Account identity pinned at the very bottom (matches the web's footer card).
+private struct SidebarAccountFooter: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Menu {
+            if let user = model.auth.currentUser {
+                Section {
+                    Text(user.displayName)
+                    Text(user.roleLabel)
+                }
+            }
+            Button("Open Foundry Web") { model.openWeb() }
+            SettingsLink { Text("App Settings…") }
+            Divider()
+            Button("Sign Out", role: .destructive) { model.auth.signOut() }
+        } label: {
+            HStack(spacing: 10) {
+                InitialsAvatar(name: model.auth.currentUser?.displayName ?? "?", url: nil, size: 30)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(model.auth.currentUser?.displayName ?? "Account").font(.callout.weight(.medium)).lineLimit(1)
+                    if let email = model.auth.currentUser?.email {
+                        Text(email).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.tertiary)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
     }
 }
 
 /// Hosts the selected feature inside a `NavigationStack` (for list → detail push) and applies
-/// the shared toolbar chrome. Native modules render their SwiftUI view; everything else opens
-/// the hosted screen in the controlled WebKit pane.
+/// the shared toolbar chrome. Native modules render their SwiftUI view; Study opens in the
+/// controlled WebKit pane.
 private struct DetailColumn: View {
     @Environment(AppModel.self) private var model
     let selection: SidebarItem?
@@ -135,8 +201,6 @@ private struct DetailColumn: View {
             content
                 .toolbar { FoundryToolbar(model: model) }
         }
-        // Re-create the pane when the module changes so each gets a clean NavigationStack
-        // (and the WebKit pane reloads its route rather than animating a push).
         .id(selection)
     }
 
@@ -150,7 +214,6 @@ private struct DetailColumn: View {
         case .care: CareView()
         case .codeclear: CodeClearView()
         case .backstage: BackstageView()
-        case .rateCard: RateCardView()
         case .settings: SettingsModuleView()
         case .none:
             ContentUnavailableView("Select a section", systemImage: "sidebar.left")

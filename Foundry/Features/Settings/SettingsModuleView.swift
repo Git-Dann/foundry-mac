@@ -6,7 +6,7 @@ struct SettingsModuleView: View {
     @Environment(AppModel.self) private var model
 
     enum Tab: String, CaseIterable, Identifiable {
-        case ai = "AI providers", team = "Team"
+        case ai = "AI providers", rateCard = "Rate Card", team = "Team"
         var id: String { rawValue }
     }
     @State private var tab: Tab = .ai
@@ -15,6 +15,7 @@ struct SettingsModuleView: View {
         Group {
             switch tab {
             case .ai: AIProvidersView()
+            case .rateCard: RateCardView()
             case .team: TeamView()
             }
         }
