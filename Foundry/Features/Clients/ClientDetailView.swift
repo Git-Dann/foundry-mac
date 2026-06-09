@@ -32,6 +32,9 @@ struct ClientDetailView: View {
             .navigationDestination(for: ClientTasksRoute.self) { route in
                 ClientTasksView(clientId: route.clientId, clientName: route.clientName, clientSlug: route.clientSlug)
             }
+            .navigationDestination(for: ClientMeetingsRoute.self) { route in
+                ClientMeetingsView(clientSlug: route.clientSlug, clientName: route.clientName, clientId: route.clientId)
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -46,6 +49,9 @@ struct ClientDetailView: View {
                 Section {
                     NavigationLink(value: ClientTasksRoute(clientId: detail.client.id, clientName: detail.client.name, clientSlug: slug)) {
                         Label("Tasks", systemImage: "checklist")
+                    }
+                    NavigationLink(value: ClientMeetingsRoute(clientSlug: slug, clientName: detail.client.name, clientId: detail.client.id)) {
+                        Label("Meeting notes", systemImage: "text.bubble")
                     }
                 }
                 if !detail.platforms.isEmpty { platforms(detail.platforms) }

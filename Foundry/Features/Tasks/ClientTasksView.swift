@@ -16,13 +16,14 @@ struct ClientTasksView: View {
     let clientSlug: String
 
     enum Mode: String, CaseIterable, Identifiable {
-        case board = "Board", list = "List"
+        case board = "Board", list = "List", gantt = "Gantt"
         var id: String { rawValue }
     }
 
     @State private var mode: Mode = .board
     @State private var tasks: [TaskItem] = []
     @State private var blocks: [FeatureBlock] = []
+    @State private var milestones: [Milestone] = []
     @State private var members: [WorkspaceMember] = []
     @State private var state: LoadState<Void> = .idle
     @State private var showingCreate = false
@@ -63,19 +64,21 @@ struct ClientTasksView: View {
         case .failed(let message):
             ErrorStateView(message: message) { Task { await load() } }
         default:
-            if topLevel.isEmpty {
-                ContentUnavailableView {
-                    Label("No tasks", systemImage: "checklist")
-                } description: {
-                    Text("Create the first task for \(clientName).")
-                } actions: {
-                    Button("New Task") { showingCreate = true }.buttonStyle(.borderedProminent)
-                }
-            } else if mode == .board {
-                boardView
-            } else {
-                listView
+            switch mode {
+            case .board: if topLevel.isEmpty { emptyTasks } else { boardView }
+            case .list: if topLevel.isEmpty { emptyTasks } else { listView }
+            case .gantt: GanttView(blocks: blocks, milestones: milestones)
             }
+        }
+    }
+
+    private var emptyTasks: some View {
+        ContentUnavailableView {
+            Label("No tasks", systemImage: "checklist")
+        } description: {
+            Text("Create the first task for \(clientName).")
+        } actions: {
+            Button("New Task") { showingCreate = true }.buttonStyle(.borderedProminent)
         }
     }
 
@@ -121,9 +124,11 @@ struct ClientTasksView: View {
         do {
             async let taskList = model.api.listTasks(clientId: clientId)
             async let blockList = try? model.api.listFeatureBlocks(clientId: clientId)
+            async let milestoneList = try? model.api.listMilestones(clientId: clientId)
             async let memberList = try? model.api.listTeamMembers()
             tasks = try await taskList
             blocks = (await blockList) ?? []
+            milestones = (await milestoneList) ?? []
             members = (await memberList) ?? []
             state = .loaded(())
             model.lastRefresh = Date()

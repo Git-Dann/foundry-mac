@@ -87,6 +87,19 @@ extension Color {
     static func pulseHealth(_ score: Int) -> Color {
         score >= 80 ? .green : (score >= 50 ? .orange : .red)
     }
+
+    /// Resolve a FeatureBlock/Milestone colour key to a SwiftUI colour (Gantt bars + milestones).
+    static func featureBlock(_ key: String?) -> Color {
+        switch key {
+        case "blue": return .blue
+        case "violet": return .purple
+        case "emerald": return .green
+        case "amber": return .orange
+        case "rose": return .pink
+        case "slate": return .secondary
+        default: return .foundryBlue
+        }
+    }
 }
 
 extension TaskStatus {
