@@ -1,0 +1,106 @@
+name: Foundry macOS Release
+
+# Mac-only release flow. This repo holds ONLY the macOS app — the web app deploys via Vercel
+# and the iPhone app ships via App Store/TestFlight from their own repos. Those flows are
+# untouched by this workflow.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "mac-v*"
+
+permissions:
+  contents: write # create releases + upload assets
+
+jobs:
+  build:
+    runs-on: macos-latest
+    env:
+      # Signing/notarization run only when these secrets are configured; otherwise the job
+      # produces an unsigned internal DMG (still a valid build artifact).
+      HAS_SIGNING: ${{ secrets.DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 != '' }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest Xcode (needs Xcode 26 / macOS 26 SDK)
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          sudo xcode-select -s "${XC:-/Applications/Xcode.app}"
+          xcodebuild -version
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Import Developer ID certificate
+        if: env.HAS_SIGNING == 'true'
+        env:
+          CERT_B64: ${{ secrets.DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
+          CERT_PW: ${{ secrets.DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PW=$(uuidgen)
+          echo "$CERT_B64" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p "$KEYCHAIN_PW" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PW" build.keychain
+          security set-keychain-settings -lut 3600 build.keychain
+          security import /tmp/cert.p12 -k build.keychain -P "$CERT_PW" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PW" build.keychain >/dev/null
+          rm -f /tmp/cert.p12
+
+      - name: Build + test
+        run: |
+          xcodegen generate
+          xcodebuild -project Foundry.xcodeproj -scheme Foundry -configuration Debug \
+            -destination 'platform=macOS' test
+
+      - name: Archive + export app
+        run: Scripts/build-release.sh
+
+      - name: Package DMG + Sparkle zip
+        run: Scripts/make-dmg.sh
+
+      - name: Notarize + staple
+        if: env.HAS_SIGNING == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: Scripts/notarize.sh
+
+      - name: Generate appcast (EdDSA-signed)
+        if: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY != '' }}
+        env:
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: Scripts/generate-appcast.sh
+
+      - name: Checksums
+        run: Scripts/checksum.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundry-macos
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.sha256
+            dist/appcast.xml
+          if-no-files-found: warn
+
+      - name: Attach to GitHub Release (tag builds)
+        if: startsWith(github.ref, 'refs/tags/mac-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.sha256
+            dist/appcast.xml
+
+# Required repo secrets (all optional — absent ⇒ unsigned internal build):
+#   APPLE_TEAM_ID
+#   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD                  (notarization via Apple ID)
+#   DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64            (base64 of the .p12)
+#   DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD
+#   SPARKLE_EDDSA_PRIVATE_KEY                              (NEVER commit this; CI-only)

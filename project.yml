@@ -1,0 +1,106 @@
+# Foundry for Mac — xcodegen project definition.
+# Generate the Xcode project with:  xcodegen generate
+# (mirrors the iOS app's xcodegen setup so the Apple family stays consistent)
+name: Foundry
+options:
+  createIntermediateGroups: true
+  minimumXcodeGenVersion: 2.40.0
+  deploymentTarget:
+    macOS: "26.0"
+  # Treat Icon Composer ".icon" bundles as a single file resource (Xcode 26).
+  fileTypes:
+    icon:
+      file: true
+
+attributes:
+  LastUpgradeCheck: "2620"
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    PRODUCT_BUNDLE_IDENTIFIER: co.gitwork.foundry
+    # Leave the team blank for unsigned/ad-hoc local builds. Set DEVELOPMENT_TEAM
+    # (and a Developer ID identity) in CI / a local override to produce a signed build.
+    DEVELOPMENT_TEAM: ""
+    INFOPLIST_FILE: Foundry/Resources/Info.plist
+    GENERATE_INFOPLIST_FILE: NO
+    DEAD_CODE_STRIPPING: YES
+    COMBINE_HIDPI_IMAGES: YES
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+
+targets:
+  Foundry:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    entitlements:
+      path: Foundry/Resources/Foundry.entitlements
+    sources:
+      - path: Foundry
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/Foundry.entitlements"
+    dependencies:
+      - package: Sparkle
+        product: Sparkle
+    settings:
+      base:
+        PRODUCT_NAME: Foundry
+        # Ad-hoc sign locally so unsigned builds compile + launch without a team.
+        # build-release.sh swaps in "Developer ID Application" when available.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "YES"
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          ENABLE_HARDENED_RUNTIME: "NO"
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-Owholemodule"
+          SWIFT_COMPILATION_MODE: wholemodule
+          # Hardened runtime is required for notarization.
+          ENABLE_HARDENED_RUNTIME: "YES"
+
+  FoundryTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: FoundryTests
+    dependencies:
+      - target: Foundry
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.gitwork.foundry.tests
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "NO"
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_FILE: ""
+
+schemes:
+  Foundry:
+    build:
+      targets:
+        Foundry: all
+        FoundryTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - FoundryTests
+    archive:
+      config: Release

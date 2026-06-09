@@ -1,0 +1,37 @@
+# Xcode / build
+DerivedData/
+build/
+dist/
+*.xcarchive
+*.app
+*.dSYM.zip
+*.dSYM
+
+# xcodegen-generated project (regenerate with `xcodegen generate`)
+*.xcodeproj
+
+# SwiftPM
+.swiftpm/
+.build/
+Package.resolved
+
+# Distribution artifacts — never commit binaries
+*.dmg
+*.zip
+*.pkg
+
+# Sparkle signing keys — NEVER COMMIT THE PRIVATE KEY
+*.private
+sparkle_keys/
+eddsa_private_key*
+*_eddsa_priv*
+
+# Notarization / signing secrets
+*.p12
+*.cer
+ExportOptions.local.plist
+.env
+.env.*
+
+# macOS cruft
+.DS_Store
