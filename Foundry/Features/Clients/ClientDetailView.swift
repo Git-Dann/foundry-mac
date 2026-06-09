@@ -5,7 +5,6 @@ import SwiftUI
 struct ClientDetailView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openWindow) private var openWindow
     let slug: String
 
     @State private var state: LoadState<ClientDetailResponse> = .idle
@@ -129,7 +128,7 @@ struct ClientDetailView: View {
         }
         ToolbarItem(placement: .secondaryAction) {
             Button {
-                openWindow(id: "foundry-web", value: WebDestination(path: "app/clients/\(slug)", title: state.value?.client.name ?? "Client"))
+                model.openWeb(path: "app/clients/\(slug)")
             } label: {
                 Label("Open in Foundry Web", systemImage: "safari")
             }

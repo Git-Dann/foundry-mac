@@ -5,7 +5,6 @@ import SwiftUI
 /// in Foundry Web ("Edit in Foundry Web").
 struct ProposalDetailView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
     let id: String
 
     @State private var state: LoadState<ProposalDetail> = .idle
@@ -147,7 +146,7 @@ struct ProposalDetailView: View {
         }
         ToolbarItem(placement: .secondaryAction) {
             Button {
-                openWindow(id: "foundry-web", value: WebDestination(path: "app/docs/\(id)", title: state.value?.title ?? "Proposal"))
+                model.openWeb(path: "app/docs/\(id)")
             } label: {
                 Label("Edit in Foundry Web", systemImage: "safari")
             }

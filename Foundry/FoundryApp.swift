@@ -14,6 +14,8 @@ struct FoundryApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                // foundry://auth-callback#token=… from the default-browser sign-in.
+                .onOpenURL { url in model.auth.handleCallback(url) }
         }
         .defaultSize(width: 1180, height: 760)
         .windowToolbarStyle(.unified(showsTitle: true))

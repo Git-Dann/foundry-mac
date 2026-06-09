@@ -3,7 +3,6 @@ import SwiftUI
 /// Read-only candidate detail (editing stays in Foundry Web).
 struct CandidateDetailView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
     let candidate: Candidate
 
     var body: some View {
@@ -78,7 +77,7 @@ struct CandidateDetailView: View {
         .toolbar {
             ToolbarItem(placement: .secondaryAction) {
                 Button {
-                    openWindow(id: "foundry-web", value: WebDestination(path: "app/code", title: candidate.name))
+                    model.openWeb(path: "app/code")
                 } label: {
                     Label("Open in Foundry Web", systemImage: "safari")
                 }

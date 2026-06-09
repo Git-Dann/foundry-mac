@@ -33,17 +33,16 @@ final class AuthTests: XCTestCase {
         XCTAssertNil(FoundryUser(jwt: "a.b")) // wrong segment count
     }
 
-    @MainActor
     func testCallbackTokenParsedFromFragmentAndQuery() {
         let fragment = URL(string: "foundry://auth-callback#token=abc123")!
-        XCTAssertEqual(WebAuthCoordinator.value(named: "token", in: fragment), "abc123")
+        XCTAssertEqual(AuthCallback.value(named: "token", in: fragment), "abc123")
 
         let query = URL(string: "foundry://auth-callback?token=xyz789")!
-        XCTAssertEqual(WebAuthCoordinator.value(named: "token", in: query), "xyz789")
+        XCTAssertEqual(AuthCallback.value(named: "token", in: query), "xyz789")
 
         let errorURL = URL(string: "foundry://auth-callback#error=domain")!
-        XCTAssertEqual(WebAuthCoordinator.value(named: "error", in: errorURL), "domain")
-        XCTAssertNil(WebAuthCoordinator.value(named: "token", in: errorURL))
+        XCTAssertEqual(AuthCallback.value(named: "error", in: errorURL), "domain")
+        XCTAssertNil(AuthCallback.value(named: "token", in: errorURL))
     }
 
     func testWebDestinationResolvesAgainstBase() {

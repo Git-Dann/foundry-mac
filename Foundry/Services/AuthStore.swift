@@ -1,15 +1,19 @@
 import Foundation
+import AppKit
 import Observation
 
 /// Owns the per-user authentication state: the Foundry mobile JWT (in the Keychain) and the
-/// decoded current user. Sign-in is delegated to `WebAuthCoordinator` (ASWebAuthenticationSession).
+/// decoded current user.
+///
+/// Sign-in opens the Foundry web login in the user's **default browser** (`NSWorkspace.open`).
+/// The web bridge mints the per-user JWT and redirects to `foundry://auth-callback`, which the
+/// app receives via `.onOpenURL` → `handleCallback`. No in-app Safari sheet, no embedded secret.
 @MainActor
 @Observable
 final class AuthStore {
     static let tokenKey = "auth.mobileJWT"
 
     private let keychain: KeychainStoring
-    private let webAuth: WebAuthCoordinator
 
     private(set) var token: String?
     private(set) var currentUser: FoundryUser?
@@ -18,11 +22,8 @@ final class AuthStore {
 
     var isSignedIn: Bool { token != nil }
 
-    init(keychain: KeychainStoring = KeychainStore(), webAuth: WebAuthCoordinator? = nil) {
+    init(keychain: KeychainStoring = KeychainStore()) {
         self.keychain = keychain
-        // Created here (in the main-actor init) rather than as a default argument, since
-        // WebAuthCoordinator's initializer is main-actor-isolated.
-        self.webAuth = webAuth ?? WebAuthCoordinator()
         // Restore an existing session on launch.
         if let stored = (try? keychain.get(Self.tokenKey)) ?? nil, !stored.isEmpty {
             token = stored
@@ -30,24 +31,34 @@ final class AuthStore {
         }
     }
 
-    /// Present the system sign-in sheet and persist the resulting JWT.
-    func signIn(baseURL: URL) async {
-        guard !isAuthenticating else { return }
-        isAuthenticating = true
+    /// Open the Foundry web sign-in in the user's default browser.
+    func signIn(baseURL: URL) {
         lastError = nil
-        defer { isAuthenticating = false }
+        isAuthenticating = true
+        NSWorkspace.shared.open(baseURL.appendingPathComponent("api/auth/desktop/start"))
+    }
 
-        do {
-            let startURL = baseURL.appendingPathComponent("api/auth/desktop/start")
-            let jwt = try await webAuth.authenticate(startURL: startURL)
-            try keychain.set(jwt, for: Self.tokenKey)
+    /// Handle the `foundry://auth-callback` deep link (wired via `.onOpenURL`).
+    func handleCallback(_ url: URL) {
+        guard AuthCallback.isAuthCallback(url) else { return }
+        isAuthenticating = false
+
+        if let jwt = AuthCallback.token(from: url), !jwt.isEmpty {
+            try? keychain.set(jwt, for: Self.tokenKey)
             token = jwt
             currentUser = FoundryUser(jwt: jwt)
-        } catch AppError.cancelled {
-            // User dismissed the sheet — no error to show.
-        } catch {
-            lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            lastError = nil
+        } else if let code = AuthCallback.errorCode(from: url) {
+            lastError = code == "domain"
+                ? AppError.unauthorizedDomain.errorDescription
+                : "Sign-in failed (\(code))."
+        } else {
+            lastError = "Sign-in didn't return a token."
         }
+    }
+
+    func cancelSignIn() {
+        isAuthenticating = false
     }
 
     func signOut() {
