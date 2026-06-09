@@ -313,3 +313,106 @@ extension FoundryAPIClient {
         return response.comments
     }
 }
+
+// MARK: - Tasks · feature blocks · milestones · team (Portal)
+// These routes return bare arrays/objects (not enveloped).
+
+extension FoundryAPIClient {
+    func listTasks(clientId: String, status: TaskStatus? = nil) async throws -> [TaskItem] {
+        var query: [URLQueryItem] = [.init(name: "clientId", value: clientId)]
+        if let status { query.append(.init(name: "status", value: status.rawValue)) }
+        return try await send(makeRequest("api/tasks", query: query))
+    }
+
+    func getTask(id: String) async throws -> TaskItemDetail {
+        try await send(makeRequest("api/tasks/\(id)"))
+    }
+
+    @discardableResult
+    func createTask(_ input: TaskInput) async throws -> TaskItem {
+        try await send(makeRequest("api/tasks", method: "POST", body: try encode(input)))
+    }
+
+    @discardableResult
+    func updateTask(id: String, _ input: TaskUpdate) async throws -> TaskItem {
+        try await send(makeRequest("api/tasks/\(id)", method: "PATCH", body: try encode(input)))
+    }
+
+    func deleteTask(id: String) async throws {
+        try await sendNoContent(makeRequest("api/tasks/\(id)", method: "DELETE"))
+    }
+
+    @discardableResult
+    func moveTask(id: String, status: TaskStatus, orderKey: Double) async throws -> TaskItem {
+        struct Body: Encodable { let status: String; let orderKey: Double }
+        let body = try encode(Body(status: status.rawValue, orderKey: orderKey))
+        return try await send(makeRequest("api/tasks/\(id)/move", method: "POST", body: body))
+    }
+
+    @discardableResult
+    func addTaskComment(id: String, body text: String) async throws -> TaskComment {
+        struct Body: Encodable { let body: String }
+        let body = try encode(Body(body: text))
+        return try await send(makeRequest("api/tasks/\(id)/comments", method: "POST", body: body))
+    }
+
+    func listFeatureBlocks(clientId: String) async throws -> [FeatureBlock] {
+        try await send(makeRequest("api/feature-blocks", query: [.init(name: "clientId", value: clientId)]))
+    }
+
+    @discardableResult
+    func createFeatureBlock(_ input: FeatureBlockInput) async throws -> FeatureBlock {
+        try await send(makeRequest("api/feature-blocks", method: "POST", body: try encode(input)))
+    }
+
+    func deleteFeatureBlock(id: String) async throws {
+        try await sendNoContent(makeRequest("api/feature-blocks/\(id)", method: "DELETE"))
+    }
+
+    func listMilestones(clientId: String) async throws -> [Milestone] {
+        try await send(makeRequest("api/milestones", query: [.init(name: "clientId", value: clientId)]))
+    }
+
+    @discardableResult
+    func createMilestone(_ input: MilestoneInput) async throws -> Milestone {
+        try await send(makeRequest("api/milestones", method: "POST", body: try encode(input)))
+    }
+
+    func deleteMilestone(id: String) async throws {
+        try await sendNoContent(makeRequest("api/milestones/\(id)", method: "DELETE"))
+    }
+
+    func listTeamMembers() async throws -> [WorkspaceMember] {
+        try await send(makeRequest("api/team/members"))
+    }
+}
+
+// MARK: - Meetings (Scribe)
+
+extension FoundryAPIClient {
+    func listMeetings(clientSlug: String, query: String? = nil) async throws -> MeetingsResponse {
+        var q: [URLQueryItem] = []
+        if let query, !query.isEmpty { q.append(.init(name: "q", value: query)) }
+        return try await send(makeRequest("api/clients/\(clientSlug)/meetings", query: q))
+    }
+
+    func getMeeting(clientSlug: String, id: String) async throws -> Meeting {
+        let response: MeetingResponse = try await send(makeRequest("api/clients/\(clientSlug)/meetings/\(id)"))
+        return response.meeting
+    }
+
+    @discardableResult
+    func ingestMeeting(clientSlug: String, _ input: MeetingIngestInput) async throws -> Meeting {
+        let request = try makeRequest("api/clients/\(clientSlug)/meetings/ingest", method: "POST", body: try encode(input))
+        let response: MeetingResponse = try await send(request)
+        return response.meeting
+    }
+
+    @discardableResult
+    func setMeetingActionDone(clientSlug: String, meetingId: String, actionItemId: String, done: Bool) async throws -> Meeting {
+        struct Body: Encodable { let actionItemId: String; let done: Bool }
+        let body = try encode(Body(actionItemId: actionItemId, done: done))
+        let response: MeetingResponse = try await send(makeRequest("api/clients/\(clientSlug)/meetings/\(meetingId)", method: "PATCH", body: body))
+        return response.meeting
+    }
+}

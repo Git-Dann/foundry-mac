@@ -29,6 +29,9 @@ struct ClientDetailView: View {
             } message: {
                 Text("This removes the client from Foundry and can't be undone.")
             }
+            .navigationDestination(for: ClientTasksRoute.self) { route in
+                ClientTasksView(clientId: route.clientId, clientName: route.clientName, clientSlug: route.clientSlug)
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -40,6 +43,11 @@ struct ClientDetailView: View {
         case .loaded(let detail):
             Form {
                 overview(detail.client)
+                Section {
+                    NavigationLink(value: ClientTasksRoute(clientId: detail.client.id, clientName: detail.client.name, clientSlug: slug)) {
+                        Label("Tasks", systemImage: "checklist")
+                    }
+                }
                 if !detail.platforms.isEmpty { platforms(detail.platforms) }
                 if !detail.designs.isEmpty { designs(detail.designs) }
                 if !detail.proposals.isEmpty { proposals(detail.proposals) }

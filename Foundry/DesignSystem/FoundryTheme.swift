@@ -89,6 +89,28 @@ extension Color {
     }
 }
 
+extension TaskStatus {
+    var tint: Color {
+        switch self {
+        case .backlog: return .secondary
+        case .todo: return .blue
+        case .doing: return .orange
+        case .inReview: return .purple
+        case .done: return .green
+        }
+    }
+}
+
+extension TaskPriority {
+    var tint: Color {
+        switch self {
+        case .low: return .secondary
+        case .medium: return .blue
+        case .high: return .red
+        }
+    }
+}
+
 /// Small, reusable status chip. A plain rounded capsule with a tinted label — NOT a glass
 /// surface (glass is reserved for system chrome).
 struct StatusChip: View {
