@@ -48,7 +48,7 @@
 	<key>SUFeedURL</key>
 	<string>https://github.com/Git-Dann/foundry-mac/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</string>
+	<string>PdV4kdvjgBQqNVzWwMvw344C6awTsMn/NiEiWPOvWdI=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 </dict>

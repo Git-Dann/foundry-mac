@@ -37,17 +37,21 @@ private struct SyncStatusView: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: model.network.isOnline ? "checkmark.circle.fill" : "wifi.slash")
-                .foregroundStyle(model.network.isOnline ? Color.green : Color.orange)
-                .imageScale(.small)
+            Circle()
+                .fill(model.network.isOnline ? Color.green : Color.orange)
+                .frame(width: 6, height: 6)
             if let last = model.lastRefresh {
                 Text(last, style: .time)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+            } else if !model.network.isOnline {
+                Text("Offline")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .help(model.network.isOnline ? "Online" : "Offline")
+        .help(model.network.isOnline ? "Online — time of last refresh" : "Offline")
         .accessibilityLabel(model.network.isOnline ? "Online" : "Offline")
     }
 }
