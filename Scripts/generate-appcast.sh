@@ -51,7 +51,9 @@ cp "${zips[@]}" "$STAGE"/
 [[ -f "$DIST/appcast.xml" ]] && cp "$DIST/appcast.xml" "$STAGE"/  # update existing feed if present
 
 echo "▸ Generating appcast from ${#zips[@]} archive(s)…"
-"$GENERATE_APPCAST" "${KEY_ARGS[@]}" --download-url-prefix "$DOWNLOAD_URL_PREFIX" "$STAGE"
+# Note the `${KEY_ARGS[@]+...}` form: macOS bash 3.2 treats an empty array as unset under
+# `set -u`, so a bare "${KEY_ARGS[@]}" would abort. This expands to nothing when empty.
+"$GENERATE_APPCAST" ${KEY_ARGS[@]+"${KEY_ARGS[@]}"} --download-url-prefix "$DOWNLOAD_URL_PREFIX" "$STAGE"
 
 if [[ -f "$STAGE/appcast.xml" ]]; then
   mv "$STAGE/appcast.xml" "$DIST/appcast.xml"
