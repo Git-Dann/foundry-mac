@@ -51,6 +51,44 @@ extension PipelineStatus {
     }
 }
 
+extension PulseScanStatus {
+    var tint: Color {
+        switch self {
+        case .completed: return .green
+        case .running, .pending: return .orange
+        case .failed: return .red
+        case .cancelled, .unknown: return .secondary
+        }
+    }
+}
+
+extension PulseCheckStatus {
+    var tint: Color {
+        switch self {
+        case .pass: return .green
+        case .warn: return .orange
+        case .fail: return .red
+        case .skipped, .unknown: return .secondary
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .pass: return "checkmark.circle.fill"
+        case .warn: return "exclamationmark.triangle.fill"
+        case .fail: return "xmark.octagon.fill"
+        case .skipped, .unknown: return "minus.circle"
+        }
+    }
+}
+
+extension Color {
+    /// Health-score tint: green ≥ 80, amber ≥ 50, else red.
+    static func pulseHealth(_ score: Int) -> Color {
+        score >= 80 ? .green : (score >= 50 ? .orange : .red)
+    }
+}
+
 /// Small, reusable status chip. A plain rounded capsule with a tinted label — NOT a glass
 /// surface (glass is reserved for system chrome).
 struct StatusChip: View {

@@ -41,6 +41,9 @@ struct ProposalDetailView: View {
                 if !proposal.timelinePhases.isEmpty { timelineSection(proposal) }
                 sectionsSection(proposal)
                 if !proposal.links.isEmpty { linksSection(proposal) }
+                DocumentInsightsSection(documentId: proposal.id)
+                DocumentVersionsSection(documentId: proposal.id)
+                DocumentCommentsSection(documentId: proposal.id)
             }
             .formStyle(.grouped)
         }

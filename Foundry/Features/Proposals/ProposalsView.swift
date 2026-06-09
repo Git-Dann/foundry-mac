@@ -26,6 +26,11 @@ struct ProposalsView: View {
             .searchFocused($searchFocused)
             .onSubmit(of: .search) { Task { await load() } }
             .toolbar {
+                ToolbarItem(placement: .secondaryAction) {
+                    NavigationLink(value: DocsAnalyticsRoute()) {
+                        Label("Analytics", systemImage: "chart.bar.xaxis")
+                    }
+                }
                 ToolbarItem(placement: .secondaryAction) { filterMenu }
             }
             .task(id: filterKey) { await load() }
@@ -35,6 +40,7 @@ struct ProposalsView: View {
             .navigationDestination(for: ProposalRoute.self) { route in
                 ProposalDetailView(id: route.id)
             }
+            .navigationDestination(for: DocsAnalyticsRoute.self) { _ in DocsAnalyticsView() }
             .sheet(isPresented: $showingCreate) {
                 ProposalCreateSheet { _ in
                     showingCreate = false

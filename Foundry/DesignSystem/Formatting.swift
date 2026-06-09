@@ -18,6 +18,21 @@ enum Formatters {
     static func medium(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
     }
+
+    /// Human duration from milliseconds: "820ms", "4.2s", "3m 12s".
+    static func duration(ms: Double) -> String {
+        guard ms.isFinite, ms > 0 else { return "—" }
+        let seconds = ms / 1000
+        if seconds < 1 { return String(format: "%.0fms", ms) }
+        if seconds < 60 { return String(format: "%.1fs", seconds) }
+        let whole = Int(seconds.rounded())
+        return "\(whole / 60)m \(whole % 60)s"
+    }
+
+    /// A 0–1 fraction as a whole-number percentage: 0.62 → "62%".
+    static func percent(_ fraction: Double) -> String {
+        String(format: "%.0f%%", (fraction.isFinite ? fraction : 0) * 100)
+    }
 }
 
 extension Error {

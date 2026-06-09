@@ -72,12 +72,11 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     /// `nil` means a native SwiftUI screen handles this module (see `DetailColumn`).
     var webDestination: WebDestination? {
         switch self {
-        case .pulse: return .pulse
         case .care: return .care
         case .study: return .study
         case .backstage: return .backstage
         case .settings: return .workspaceSettings
-        case .dashboard, .proposals, .clients, .codeclear, .rateCard: return nil
+        case .dashboard, .pulse, .proposals, .clients, .codeclear, .rateCard: return nil
         }
     }
 
@@ -148,6 +147,7 @@ private struct DetailColumn: View {
     private var content: some View {
         switch selection {
         case .dashboard: DashboardView()
+        case .pulse: PulseView()
         case .proposals: ProposalsView()
         case .clients: ClientsView()
         case .codeclear: CodeClearView()

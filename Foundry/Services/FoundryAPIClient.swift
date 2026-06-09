@@ -204,3 +204,112 @@ extension FoundryAPIClient {
         try await send(makeRequest("api/admin/ai-cost"))
     }
 }
+
+// MARK: - Pulse
+
+extension FoundryAPIClient {
+    func listPulseScans(clientId: String? = nil) async throws -> [PulseScanSummary] {
+        var query: [URLQueryItem] = []
+        if let clientId { query.append(.init(name: "clientId", value: clientId)) }
+        let response: PulseScanListResponse = try await send(makeRequest("api/pulse/scans", query: query))
+        return response.scans
+    }
+
+    func getPulseScan(id: String) async throws -> PulseScanDetail {
+        let response: PulseScanResponse = try await send(makeRequest("api/pulse/scans/\(id)"))
+        return response.scan
+    }
+
+    @discardableResult
+    func createPulseScan(_ input: PulseScanInput) async throws -> PulseScanDetail {
+        let request = try makeRequest("api/pulse/scans", method: "POST", body: try encode(input))
+        let response: PulseScanResponse = try await send(request)
+        return response.scan
+    }
+
+    func cancelPulseScan(id: String) async throws {
+        try await sendNoContent(makeRequest("api/pulse/scans/\(id)/cancel"))
+    }
+
+    func retryPulseScan(id: String) async throws {
+        try await sendNoContent(makeRequest("api/pulse/scans/\(id)/retry"))
+    }
+
+    func reanalysePulseScan(id: String) async throws {
+        try await sendNoContent(makeRequest("api/pulse/scans/\(id)/reanalyse"))
+    }
+
+    func listPulseMonitors() async throws -> [PulseMonitor] {
+        let response: PulseMonitorListResponse = try await send(makeRequest("api/pulse/monitors"))
+        return response.monitors
+    }
+
+    @discardableResult
+    func createPulseMonitor(_ input: PulseMonitorInput) async throws -> PulseMonitor {
+        let request = try makeRequest("api/pulse/monitors", method: "POST", body: try encode(input))
+        let response: PulseMonitorResponse = try await send(request)
+        return response.monitor
+    }
+
+    func setPulseMonitorActive(id: String, isActive: Bool) async throws {
+        let body = try encode(["isActive": isActive])
+        try await sendNoContent(makeRequest("api/pulse/monitors/\(id)", method: "PATCH", body: body))
+    }
+
+    func deletePulseMonitor(id: String) async throws {
+        try await sendNoContent(makeRequest("api/pulse/monitors/\(id)", method: "DELETE"))
+    }
+
+    func listPulseLeads() async throws -> [PulseLead] {
+        let response: PulseLeadListResponse = try await send(makeRequest("api/pulse/leads"))
+        return response.leads
+    }
+
+    func importPulseLead(id: String) async throws {
+        try await sendNoContent(makeRequest("api/pulse/leads/\(id)/import", method: "POST"))
+    }
+
+    /// Live SSE stream of a running scan. Yields each `data:` JSON payload; the caller decodes a
+    /// `PulseStreamEnvelope` and merges deltas. Reads the per-user JWT (never a server secret).
+    func pulseScanStream(id: String) throws -> AsyncThrowingStream<String, Error> {
+        guard let token = auth.token else { throw AppError.notAuthenticated }
+        var url = environment.baseURL
+        for segment in "api/pulse/scans/\(id)/stream".split(separator: "/") {
+            url.appendPathComponent(String(segment))
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        return SSEClient.dataLines(for: request)
+    }
+}
+
+// MARK: - Docs analytics + versions + comments
+
+extension FoundryAPIClient {
+    /// Per-document link-tracking analytics (visitors, dwell heatmap, conversion, device/geo).
+    func documentAnalytics(id: String) async throws -> DocumentAnalytics {
+        let response: DocumentAnalyticsResponse = try await send(makeRequest("api/documents/\(id)/analytics"))
+        return response.analytics
+    }
+
+    /// Cross-document funnel + leaderboards. `/api/documents/analytics` is a static segment that
+    /// out-prioritises `/api/documents/[id]`.
+    func documentsAnalytics(documentType: DocumentType? = nil, days: Int? = nil) async throws -> DocsAnalyticsSummary {
+        var query: [URLQueryItem] = []
+        if let documentType { query.append(.init(name: "documentType", value: documentType.rawValue)) }
+        if let days { query.append(.init(name: "days", value: String(days))) }
+        let response: DocsAnalyticsResponse = try await send(makeRequest("api/documents/analytics", query: query))
+        return response.analytics
+    }
+
+    func documentVersions(id: String) async throws -> [DocumentVersion] {
+        let response: DocumentVersionsResponse = try await send(makeRequest("api/documents/\(id)/versions"))
+        return response.versions
+    }
+
+    func documentComments(id: String) async throws -> [DocumentComment] {
+        let response: DocumentCommentsResponse = try await send(makeRequest("api/documents/\(id)/comments"))
+        return response.comments
+    }
+}
