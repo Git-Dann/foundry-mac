@@ -33,6 +33,28 @@ enum Formatters {
     static func percent(_ fraction: Double) -> String {
         String(format: "%.0f%%", (fraction.isFinite ? fraction : 0) * 100)
     }
+
+    private static let bareDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    /// A `Date` as `yyyy-MM-dd` (UTC) — the format Backstage leave/expense dates expect.
+    static func isoDay(_ date: Date) -> String { bareDayFormatter.string(from: date) }
+
+    /// Format a date that may arrive as a full ISO-8601 timestamp OR a bare `yyyy-MM-dd`.
+    static func day(_ iso: String) -> String {
+        if let date = ISO8601DateParser.date(from: iso) {
+            return date.formatted(date: .abbreviated, time: .omitted)
+        }
+        if let date = bareDayFormatter.date(from: iso) {
+            return date.formatted(date: .abbreviated, time: .omitted)
+        }
+        return iso
+    }
 }
 
 extension Error {

@@ -498,3 +498,53 @@ extension FoundryAPIClient {
         return response.logs
     }
 }
+
+// MARK: - Backstage (leave + expenses)
+
+extension FoundryAPIClient {
+    func listLeave(scope: String = "me", status: LeaveStatus? = nil) async throws -> [LeaveRequest] {
+        var query: [URLQueryItem] = [.init(name: "scope", value: scope)]
+        if let status { query.append(.init(name: "status", value: status.rawValue)) }
+        return try await send(makeRequest("api/backstage/leave", query: query))
+    }
+
+    func leaveAllowance() async throws -> LeaveAllowance {
+        try await send(makeRequest("api/backstage/allowance"))
+    }
+
+    @discardableResult
+    func requestLeave(_ input: LeaveRequestInput) async throws -> LeaveRequest {
+        try await send(makeRequest("api/backstage/leave", method: "POST", body: try encode(input)))
+    }
+
+    @discardableResult
+    func approveLeave(id: String, note: String?) async throws -> LeaveRequest {
+        try await send(makeRequest("api/backstage/leave/\(id)/approve", method: "POST", body: try encode(["note": note ?? ""])))
+    }
+
+    @discardableResult
+    func rejectLeave(id: String, note: String?) async throws -> LeaveRequest {
+        try await send(makeRequest("api/backstage/leave/\(id)/reject", method: "POST", body: try encode(["note": note ?? ""])))
+    }
+
+    func cancelLeave(id: String) async throws {
+        try await sendNoContent(makeRequest("api/backstage/leave/\(id)", method: "DELETE"))
+    }
+
+    func listExpenses(scope: String = "me", status: ExpenseStatus? = nil) async throws -> [Expense] {
+        var query: [URLQueryItem] = [.init(name: "scope", value: scope)]
+        if let status { query.append(.init(name: "status", value: status.rawValue)) }
+        return try await send(makeRequest("api/backstage/expenses", query: query))
+    }
+
+    @discardableResult
+    func submitExpense(_ input: ExpenseInput) async throws -> Expense {
+        try await send(makeRequest("api/backstage/expenses", method: "POST", body: try encode(input)))
+    }
+
+    @discardableResult
+    func reviewExpense(id: String, status: ExpenseStatus, note: String?) async throws -> Expense {
+        struct Body: Encodable { let status: String; let note: String? }
+        return try await send(makeRequest("api/backstage/expenses/\(id)/review", method: "POST", body: try encode(Body(status: status.rawValue, note: note))))
+    }
+}

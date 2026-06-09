@@ -158,6 +158,29 @@ extension ConversationSentiment {
     }
 }
 
+extension LeaveStatus {
+    var tint: Color {
+        switch self {
+        case .pending: return .orange
+        case .approved: return .green
+        case .rejected: return .red
+        case .cancelled, .unknown: return .secondary
+        }
+    }
+}
+
+extension ExpenseStatus {
+    var tint: Color {
+        switch self {
+        case .submitted: return .orange
+        case .approved: return .blue
+        case .reimbursed: return .green
+        case .rejected: return .red
+        case .unknown: return .secondary
+        }
+    }
+}
+
 /// Small, reusable status chip. A plain rounded capsule with a tinted label — NOT a glass
 /// surface (glass is reserved for system chrome).
 struct StatusChip: View {

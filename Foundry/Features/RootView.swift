@@ -73,9 +73,8 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     var webDestination: WebDestination? {
         switch self {
         case .study: return .study
-        case .backstage: return .backstage
         case .settings: return .workspaceSettings
-        case .dashboard, .pulse, .proposals, .clients, .care, .codeclear, .rateCard: return nil
+        case .dashboard, .pulse, .proposals, .clients, .care, .codeclear, .backstage, .rateCard: return nil
         }
     }
 
@@ -151,6 +150,7 @@ private struct DetailColumn: View {
         case .clients: ClientsView()
         case .care: CareView()
         case .codeclear: CodeClearView()
+        case .backstage: BackstageView()
         case .rateCard: RateCardView()
         case .none:
             ContentUnavailableView("Select a section", systemImage: "sidebar.left")
