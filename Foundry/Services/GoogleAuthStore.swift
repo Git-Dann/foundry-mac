@@ -131,6 +131,9 @@ final class GoogleAuthStore {
 
     private static func postToken(_ fields: [String: String]) async throws -> TokenResponse {
         guard let url = URL(string: GoogleOAuthConfig.tokenEndpoint) else { throw AppError.network("Bad token endpoint.") }
+        var fields = fields
+        // Desktop-app clients usually require the secret at the token endpoint (even with PKCE).
+        if let secret = GoogleOAuthConfig.clientSecret { fields["client_secret"] = secret }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")

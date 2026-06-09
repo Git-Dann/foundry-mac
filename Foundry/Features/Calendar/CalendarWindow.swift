@@ -25,6 +25,7 @@ struct CalendarWindow: View {
 private struct CalendarSetupView: View {
     var onSaved: () -> Void
     @State private var clientID = GoogleOAuthConfig.clientID
+    @State private var clientSecret = GoogleOAuthConfig.clientSecret ?? ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -33,11 +34,17 @@ private struct CalendarSetupView: View {
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextField("266306419039-….apps.googleusercontent.com", text: $clientID)
                 .textFieldStyle(.roundedBorder)
+            SecureField("Client secret (optional — Desktop clients usually need it)", text: $clientSecret)
+                .textFieldStyle(.roundedBorder)
             HStack {
                 Spacer()
-                Button("Save") { GoogleOAuthConfig.setClientID(clientID); onSaved() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(clientID.trimmed.isEmpty)
+                Button("Save") {
+                    GoogleOAuthConfig.setClientID(clientID)
+                    GoogleOAuthConfig.setClientSecret(clientSecret)
+                    onSaved()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(clientID.trimmed.isEmpty)
             }
         }
         .padding(28)
