@@ -120,20 +120,175 @@ struct PulseCriticalGap: Decodable, Sendable, Identifiable {
     var id: String { gap }
 }
 
-/// The slice of the (large) server `llmAnalysis` the native detail renders. Extra keys in the
-/// payload (classification, roadmap, tech debt, blockers, …) are intentionally not decoded — the
-/// full visual report is opened in the WebKit pane instead.
+/// The full server `llmAnalysis`, rendered natively (the report no longer opens in WebKit).
+/// Every field is optional + leniently decoded so server-side drift never breaks the screen;
+/// `projectClassification` is intentionally not decoded (internal routing data).
 struct PulseAnalysis: Decodable, Sendable {
     let executiveSummary: String?
     let healthNarrative: String?
     let proposalHook: String?
     let strengths: [PulseStrength]?
     let criticalGaps: [PulseCriticalGap]?
+    let buildOpportunities: [PulseOpportunity]?
+    let scalingRoadmap: [PulseRoadmapPhase]?
+    let techDebt: [PulseTechDebt]?
+    let productionBlockers: [PulseBlocker]?
+    let productionReadinessChecklist: [PulseReadinessItem]?
+    let techStackAnalysis: PulseTechStackAnalysis?
 }
 
-/// Lean scan detail: enough for the native screen (header + checks + analysis essentials). The
-/// heavy nested agent payloads (discoveryKit, codeInsights, deployInsights, competitorData, …)
-/// are deliberately omitted and surfaced via the embedded full report.
+struct PulseOpportunity: Decodable, Sendable, Identifiable {
+    let title: String
+    let description: String?
+    let estimatedEffort: String?
+    let businessValue: String?
+    let category: String?
+    var id: String { title }
+}
+
+struct PulseRoadmapPhase: Decodable, Sendable, Identifiable {
+    let phase: String?
+    let title: String
+    let duration: String?
+    let goals: [String]?
+    var id: String { title }
+
+    enum CodingKeys: String, CodingKey { case phase, title, duration, goals }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // `phase` arrives as a number OR a string depending on the model's mood.
+        if let number = try? c.decodeIfPresent(Int.self, forKey: .phase) {
+            phase = String(number)
+        } else {
+            phase = (try? c.decodeIfPresent(String.self, forKey: .phase)) ?? nil
+        }
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? "Phase"
+        duration = try? c.decodeIfPresent(String.self, forKey: .duration)
+        goals = try? c.decodeIfPresent([String].self, forKey: .goals)
+    }
+}
+
+struct PulseTechDebt: Decodable, Sendable, Identifiable {
+    let area: String
+    let description: String?
+    let severity: String?
+    var id: String { area }
+}
+
+struct PulseBlocker: Decodable, Sendable, Identifiable {
+    let category: String?
+    let blocker: String
+    let why: String?
+    let recommendedService: String?
+    let urgency: String?
+    var id: String { blocker }
+}
+
+struct PulseReadinessItem: Decodable, Sendable, Identifiable {
+    let category: String?
+    let item: String
+    let status: String?
+    let notes: String?
+    var id: String { item }
+
+    var isReady: Bool { (status ?? "").lowercased().contains("ready") || (status ?? "").lowercased() == "pass" }
+}
+
+struct PulseTechStackAnalysis: Decodable, Sendable {
+    let assessment: String?
+    let detectedStack: [String]?
+    let recommendations: [String]?
+    let missingForProduction: [String]?
+}
+
+// MARK: Agent insights (code / deploy / browser) + discovery + competitors
+
+struct PulseDiscoveryKit: Decodable, Sendable {
+    struct WowFinding: Decodable, Sendable { let finding: String?; let impact: String? }
+    struct Question: Decodable, Sendable, Identifiable {
+        let question: String
+        let context: String?
+        let followUp: String?
+        var id: String { question }
+    }
+    struct Objection: Decodable, Sendable, Identifiable {
+        let objection: String
+        let response: String?
+        var id: String { objection }
+    }
+    struct PricingAnchor: Decodable, Sendable {
+        let low: Double?
+        let high: Double?
+        let rationale: String?
+    }
+
+    let openingStatement: String?
+    let wowFinding: WowFinding?
+    let questions: [Question]?
+    let anticipatedObjections: [Objection]?
+    let pricingAnchor: PricingAnchor?
+    let talkingPoints: [String]?
+}
+
+struct PulseCodeInsights: Decodable, Sendable {
+    struct Vulnerability: Decodable, Sendable, Identifiable {
+        let severity: String?
+        let packageName: String?
+        let description: String?
+        var id: String { (packageName ?? "") + (description ?? "") }
+    }
+    let vulnerabilities: [Vulnerability]?
+    let branchProtected: Bool?
+    let requiresReviews: Bool?
+    let prReviewRate: Double?
+    let commitVelocity: Double?
+    let uniqueContributors: Int?
+}
+
+struct PulseDeployInsights: Decodable, Sendable {
+    let platform: String?
+    let recentDeployments: Int?
+    let failedDeployments: Int?
+    let avgBuildMs: Double?
+    let buildWarnings: [String]?
+    let recentErrorPatterns: [String]?
+}
+
+struct PulseBrowserInsights: Decodable, Sendable {
+    let performanceScore: Double?
+    let accessibilityScore: Double?
+    let seoScore: Double?
+    let bestPracticesScore: Double?
+    let lcp: Double?
+    let cls: Double?
+    let fcp: Double?
+    let tbt: Double?
+    let cruxCategory: String?
+}
+
+struct PulseCompetitorData: Decodable, Sendable {
+    struct CompetitorScan: Decodable, Sendable, Identifiable {
+        let url: String
+        let healthScore: Int?
+        let checksPass: Int?
+        let checksWarn: Int?
+        let checksFail: Int?
+        let techStack: [String]?
+        var id: String { url }
+    }
+    struct Comparison: Decodable, Sendable {
+        let summary: String?
+        let advantages: [String]?
+        let gaps: [String]?
+        let recommendation: String?
+    }
+    let scans: [CompetitorScan]?
+    let comparison: Comparison?
+}
+
+/// Full scan detail — header, checks, the complete AI analysis, and every agent payload. The
+/// report is rendered entirely natively.
 struct PulseScanDetail: Decodable, Identifiable, Sendable {
     let id: String
     let projectName: String
@@ -147,6 +302,12 @@ struct PulseScanDetail: Decodable, Identifiable, Sendable {
     let previousHealthScore: Int?
     let techStack: [String]?
     let llmAnalysis: PulseAnalysis?
+    let discoveryKit: PulseDiscoveryKit?
+    let codeInsights: PulseCodeInsights?
+    let deployInsights: PulseDeployInsights?
+    let browserInsights: PulseBrowserInsights?
+    let competitorData: PulseCompetitorData?
+    let aiError: String?
     let checks: [PulseScanCheck]
     let shareToken: String?
     let isShared: Bool?

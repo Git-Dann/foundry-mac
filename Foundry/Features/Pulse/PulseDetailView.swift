@@ -6,7 +6,6 @@ import SwiftUI
 /// opens in the WebKit pane.
 struct PulseDetailView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
     let id: String
 
     @State private var scan: PulseScanDetail?
@@ -60,6 +59,25 @@ struct PulseDetailView: View {
                     if let actionError { Text(actionError).font(.callout).foregroundStyle(.red) }
                     if displayStatus.isRunning { runningBanner }
                     if let analysis = scan?.llmAnalysis { analysisSection(analysis) }
+                    if let browser = scan?.browserInsights { BrowserInsightsSection(insights: browser) }
+                    if let code = scan?.codeInsights { CodeInsightsSection(insights: code) }
+                    if let deploy = scan?.deployInsights { DeployInsightsSection(insights: deploy) }
+                    if let analysis = scan?.llmAnalysis {
+                        if (analysis.buildOpportunities?.isEmpty == false)
+                            || (analysis.scalingRoadmap?.isEmpty == false)
+                            || (analysis.techDebt?.isEmpty == false) {
+                            OpportunitiesSection(analysis: analysis)
+                        }
+                        if (analysis.productionBlockers?.isEmpty == false)
+                            || (analysis.productionReadinessChecklist?.isEmpty == false)
+                            || analysis.techStackAnalysis != nil {
+                            ReadinessSection(analysis: analysis)
+                        }
+                    }
+                    if let kit = scan?.discoveryKit { DiscoveryKitSection(kit: kit) }
+                    if let competitors = scan?.competitorData, competitors.scans?.isEmpty == false {
+                        CompetitorsSection(data: competitors, ownScore: displayHealth)
+                    }
                     if !mergedChecks.isEmpty { checksSection }
                 }
                 .padding(20)
@@ -152,11 +170,11 @@ struct PulseDetailView: View {
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .secondaryAction) {
             Button {
-                openWindow(value: WebDestination(path: "app/pulse/\(id)", title: scan?.projectName ?? "Pulse report"))
+                model.openWeb(path: "app/pulse/\(id)")
             } label: {
-                Label("Full report", systemImage: "doc.richtext")
+                Label("Open in Foundry Web", systemImage: "safari")
             }
-            .help("Open the full visual report")
+            .help("Open this scan in the browser")
         }
         ToolbarItem(placement: .secondaryAction) {
             Menu {
