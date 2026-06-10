@@ -1,5 +1,13 @@
 import Foundation
 
+/// Honest app identification on every outbound request (never spoofs a browser).
+enum FoundryUserAgent {
+    static let value: String = {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        return "FoundryMac/\(version) (macOS; co.gitwork.foundry)"
+    }()
+}
+
 /// Transport-agnostic request description. Mirrors the iOS app's `APIRequest`.
 struct APIRequest {
     var url: URL
@@ -45,9 +53,13 @@ final class NetworkClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = request.method
         urlRequest.httpBody = request.body
+        urlRequest.timeoutInterval = 30
         request.headers.forEach { urlRequest.setValue($1, forHTTPHeaderField: $0) }
         if request.body != nil, urlRequest.value(forHTTPHeaderField: "Content-Type") == nil {
             urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        if urlRequest.value(forHTTPHeaderField: "User-Agent") == nil {
+            urlRequest.setValue(FoundryUserAgent.value, forHTTPHeaderField: "User-Agent")
         }
 
         let data: Data

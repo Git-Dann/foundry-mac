@@ -149,5 +149,12 @@ struct HealthBadge: View {
             }
         }
         .frame(width: size, height: size)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        if status.isRunning { return "Scan running" }
+        if let score { return "Health score \(score)" }
+        return "No health score"
     }
 }

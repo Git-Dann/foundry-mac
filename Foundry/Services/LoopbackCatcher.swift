@@ -12,7 +12,11 @@ final class LoopbackCatcher: @unchecked Sendable {
 
     /// Start listening on an OS-assigned localhost port; returns that port.
     func start() async throws -> UInt16 {
-        let listener = try NWListener(using: .tcp, on: .any)
+        // Bind to 127.0.0.1 ONLY — this listener exists solely to catch the browser's local
+        // OAuth redirect; it must never be reachable from other devices on the network.
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: .any)
+        let listener = try NWListener(using: parameters)
         self.listener = listener
         return try await withCheckedThrowingContinuation { continuation in
             listener.stateUpdateHandler = { state in

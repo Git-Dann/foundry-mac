@@ -293,6 +293,9 @@ extension FoundryAPIClient {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue(FoundryUserAgent.value, forHTTPHeaderField: "User-Agent")
+        // Long-lived stream: keep the default idle timeout (server pings every 15s) — do NOT
+        // apply the 30s request timeout used for normal API calls.
         return SSEClient.dataLines(for: request)
     }
 }

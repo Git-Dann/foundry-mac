@@ -136,7 +136,9 @@ final class GoogleAuthStore {
         if let secret = GoogleOAuthConfig.clientSecret { fields["client_secret"] = secret }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 30
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue(FoundryUserAgent.value, forHTTPHeaderField: "User-Agent")
         request.httpBody = fields.map { "\($0.key)=\(formEncode($0.value))" }.joined(separator: "&").data(using: .utf8)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {

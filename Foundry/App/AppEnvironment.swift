@@ -23,20 +23,34 @@ final class AppEnvironment {
     init(userDefaults: UserDefaults = .standard) {
         if let override = userDefaults.string(forKey: AppEnvironment.baseURLOverrideKey),
            !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           let url = URL(string: override) {
+           let url = URL(string: override),
+           AppEnvironment.isAllowedOverride(url) {
             baseURL = url
         } else {
             baseURL = AppEnvironment.productionBaseURL
         }
     }
 
-    /// Apply (or clear) the debug base-URL override and persist it.
+    /// The debug override may only point at Foundry's own hosts (production domain or a Vercel
+    /// preview) or local dev. Every API call attaches the user's Bearer JWT, so an arbitrary
+    /// host here would hand the session token to whoever runs that server.
+    static func isAllowedOverride(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return false }
+        if host == "localhost" || host == "127.0.0.1" {
+            return scheme == "http" || scheme == "https"
+        }
+        guard scheme == "https" else { return false }
+        let allowedSuffixes = ["gitwork.co.uk", "vercel.app"]
+        return allowedSuffixes.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    /// Apply (or clear) the debug base-URL override and persist it. Disallowed hosts are ignored.
     func setBaseURLOverride(_ string: String?, userDefaults: UserDefaults = .standard) {
         let trimmed = string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if trimmed.isEmpty {
             userDefaults.removeObject(forKey: AppEnvironment.baseURLOverrideKey)
             baseURL = AppEnvironment.productionBaseURL
-        } else if let url = URL(string: trimmed) {
+        } else if let url = URL(string: trimmed), AppEnvironment.isAllowedOverride(url) {
             userDefaults.set(trimmed, forKey: AppEnvironment.baseURLOverrideKey)
             baseURL = url
         }

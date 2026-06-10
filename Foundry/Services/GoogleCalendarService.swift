@@ -10,7 +10,9 @@ final class GoogleCalendarService {
     init(auth: GoogleAuthStore) { self.auth = auth }
 
     func listEvents(calendarId: String = "primary", from: Date, to: Date) async throws -> [GCalEvent] {
-        var components = URLComponents(string: "\(base)/calendars/\(calendarId)/events")!
+        guard var components = URLComponents(string: "\(base)/calendars/\(escape(calendarId))/events") else {
+            throw AppError.network("Invalid calendar address.")
+        }
         components.queryItems = [
             .init(name: "timeMin", value: ISO8601DateParser.string(from: from)),
             .init(name: "timeMax", value: ISO8601DateParser.string(from: to)),
@@ -18,32 +20,41 @@ final class GoogleCalendarService {
             .init(name: "orderBy", value: "startTime"),
             .init(name: "maxResults", value: "250"),
         ]
+        guard let url = components.url else { throw AppError.network("Invalid calendar address.") }
         let token = try await auth.validAccessToken()
-        let data = try await execute(request(components.url!, method: "GET", token: token))
+        let data = try await execute(request(url, method: "GET", token: token))
         let response = try JSONDecoder().decode(GCalEventsResponse.self, from: data)
         return (response.items ?? []).filter { !$0.isCancelled }
     }
 
     @discardableResult
     func createEvent(calendarId: String = "primary", _ input: GCalEventInput) async throws -> GCalEvent {
-        try await write(path: "/calendars/\(calendarId)/events", method: "POST", body: input)
+        try await write(path: "/calendars/\(escape(calendarId))/events", method: "POST", body: input)
     }
 
     @discardableResult
     func updateEvent(calendarId: String = "primary", id: String, _ input: GCalEventInput) async throws -> GCalEvent {
-        try await write(path: "/calendars/\(calendarId)/events/\(id)", method: "PATCH", body: input)
+        try await write(path: "/calendars/\(escape(calendarId))/events/\(escape(id))", method: "PATCH", body: input)
     }
 
     func deleteEvent(calendarId: String = "primary", id: String) async throws {
+        guard let url = URL(string: "\(base)/calendars/\(escape(calendarId))/events/\(escape(id))") else {
+            throw AppError.network("Invalid calendar address.")
+        }
         let token = try await auth.validAccessToken()
-        _ = try await execute(request(URL(string: "\(base)/calendars/\(calendarId)/events/\(id)")!, method: "DELETE", token: token))
+        _ = try await execute(request(url, method: "DELETE", token: token))
     }
 
     // MARK: Plumbing
 
+    private func escape(_ segment: String) -> String {
+        segment.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? segment
+    }
+
     private func write<Body: Encodable>(path: String, method: String, body: Body) async throws -> GCalEvent {
+        guard let url = URL(string: base + path) else { throw AppError.network("Invalid calendar address.") }
         let token = try await auth.validAccessToken()
-        var req = request(URL(string: base + path)!, method: method, token: token)
+        var req = request(url, method: method, token: token)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(body)
         let data = try await execute(req)
@@ -53,7 +64,9 @@ final class GoogleCalendarService {
     private func request(_ url: URL, method: String, token: String) -> URLRequest {
         var req = URLRequest(url: url)
         req.httpMethod = method
+        req.timeoutInterval = 30
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue(FoundryUserAgent.value, forHTTPHeaderField: "User-Agent")
         return req
     }
 
