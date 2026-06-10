@@ -18,11 +18,7 @@ struct WebDestination: Codable, Hashable, Identifiable {
 
 // MARK: - Presets
 
-/// Hosted screens that intentionally stay in WebKit. Everything else is native — heavy editors
-/// (Docs section editor, Pulse full report, Care report builder) are opened contextually with an
-/// inline `WebDestination`. All resolve against the configured base URL, so no host is
-/// hard-coded; a single in-pane login persists (shared `WKWebsiteDataStore`).
-extension WebDestination {
-    /// Study — the multi-agent research runner stays embedded by design.
-    static let study = WebDestination(path: "app/study", title: "Study")
-}
+// Every sidebar module is native. The only remaining WebKit use is contextual — heavy web-shaped
+// editors (the Docs section editor, the Care monthly-report builder) opened with an inline
+// `WebDestination` in the "Foundry Web" window. A single in-pane login persists across them
+// (shared `WKWebsiteDataStore`).

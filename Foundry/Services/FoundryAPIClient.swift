@@ -552,6 +552,62 @@ extension FoundryAPIClient {
     }
 }
 
+// MARK: - Study
+
+extension FoundryAPIClient {
+    func listStudies() async throws -> [StudyListItem] {
+        let response: StudyListResponse = try await send(makeRequest("api/study/studies"))
+        return response.studies
+    }
+
+    func getStudy(id: String) async throws -> StudyRecord {
+        let response: StudyResponse2 = try await send(makeRequest("api/study/studies/\(id)"))
+        return response.study
+    }
+
+    @discardableResult
+    func createStudy(_ input: StudyCreateInput) async throws -> StudyRecord {
+        let request = try makeRequest("api/study/studies", method: "POST", body: try encode(input))
+        let response: StudyResponse2 = try await send(request)
+        return response.study
+    }
+
+    func deleteStudy(id: String) async throws {
+        try await sendNoContent(makeRequest("api/study/studies/\(id)", method: "DELETE"))
+    }
+
+    /// Kicks off async plan generation (status → PLAN_GENERATING; follow the stream).
+    func generateStudyPlan(id: String) async throws {
+        let body = try encode(["generate": true])
+        try await sendNoContent(makeRequest("api/study/studies/\(id)/plan", method: "POST", body: body))
+    }
+
+    /// Starts the interview run (status → RUNNING; follow the stream).
+    func runStudy(id: String) async throws {
+        try await sendNoContent(makeRequest("api/study/studies/\(id)/run", method: "POST"))
+    }
+
+    func listStudyPersonas() async throws -> [StudyPersona] {
+        let response: StudyPersonasResponse = try await send(makeRequest("api/study/personas"))
+        return response.personas
+    }
+
+    /// Live SSE stream of a generating/running study. Yields each `data:` JSON payload;
+    /// decode a `StudyStreamEnvelope` ("state" with the full study, then "complete").
+    func studyStream(id: String) throws -> AsyncThrowingStream<String, Error> {
+        guard let token = auth.token else { throw AppError.notAuthenticated }
+        var url = environment.baseURL
+        for segment in "api/study/studies/\(id)/stream".split(separator: "/") {
+            url.appendPathComponent(String(segment))
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue(FoundryUserAgent.value, forHTTPHeaderField: "User-Agent")
+        return SSEClient.dataLines(for: request)
+    }
+}
+
 // MARK: - Settings + Team
 
 extension FoundryAPIClient {

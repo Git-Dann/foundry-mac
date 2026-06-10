@@ -62,13 +62,6 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// Non-nil only for modules rendered in the WebKit pane (Study). Everything else is native.
-    var webDestination: WebDestination? {
-        switch self {
-        case .study: return .study
-        default: return nil
-        }
-    }
 }
 
 /// The app's native window content: a `NavigationSplitView` with a system sidebar, gated by
@@ -212,17 +205,12 @@ private struct DetailColumn: View {
         case .proposals: ProposalsView()
         case .clients: ClientsView()
         case .care: CareView()
+        case .study: StudyView()
         case .codeclear: CodeClearView()
         case .backstage: BackstageView()
         case .settings: SettingsModuleView()
         case .none:
             ContentUnavailableView("Select a section", systemImage: "sidebar.left")
-        default:
-            if let destination = selection?.webDestination {
-                FoundryWebScreen(destination: destination)
-            } else {
-                ContentUnavailableView("Select a section", systemImage: "sidebar.left")
-            }
         }
     }
 }

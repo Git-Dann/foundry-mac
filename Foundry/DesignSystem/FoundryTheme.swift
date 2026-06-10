@@ -158,6 +158,45 @@ extension ConversationSentiment {
     }
 }
 
+extension StudyStatus {
+    var tint: Color {
+        switch self {
+        case .completed: return .green
+        case .running, .planGenerating: return .orange
+        case .planReady: return .blue
+        case .failed: return .red
+        case .draft, .unknown: return .secondary
+        }
+    }
+}
+
+extension Color {
+    /// Persona accent (Study) — the web's tailwind colour keys.
+    static func persona(_ key: String?) -> Color {
+        switch key {
+        case "violet": return .purple
+        case "amber": return .orange
+        case "blue": return .blue
+        case "green": return .green
+        case "rose": return .pink
+        case "cyan": return .cyan
+        case "emerald": return .mint
+        case "orange": return .orange
+        default: return .foundryBlue
+        }
+    }
+
+    /// Sentiment tint for interview responses.
+    static func sentiment(_ value: String?) -> Color {
+        switch value {
+        case "positive", "delighted": return .green
+        case "negative", "frustrated": return .red
+        case "confused": return .orange
+        default: return .secondary
+        }
+    }
+}
+
 extension LeaveStatus {
     var tint: Color {
         switch self {
