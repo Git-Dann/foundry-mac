@@ -96,6 +96,11 @@ struct PulseView: View {
             scans = try await model.api.listPulseScans()
             state = .loaded(())
             model.lastRefresh = Date()
+            // Feed the Pulse Health widget (best-effort).
+            let recent = scans.sorted { $0.createdAt > $1.createdAt }.prefix(6)
+            AppGroupStore.update { snapshot in
+                snapshot.scans = recent.map { .init(id: $0.id, name: $0.projectName, score: $0.healthScore) }
+            }
         } catch {
             state = .failed(error.userMessage)
         }

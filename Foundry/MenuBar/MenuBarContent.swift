@@ -113,5 +113,14 @@ struct MenuBarContent: View {
         loadingCost = true
         defer { loadingCost = false }
         cost = try? await model.api.aiCost()
+        if let cost, cost.configured {
+            AppGroupStore.update { snapshot in
+                snapshot.aiSpend = .init(
+                    today: cost.totalToday,
+                    monthToDate: cost.totalMonthToDate,
+                    currency: cost.commonCurrency ?? "USD"
+                )
+            }
+        }
     }
 }

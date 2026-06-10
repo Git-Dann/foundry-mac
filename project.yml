@@ -23,8 +23,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.7.1"
-    CURRENT_PROJECT_VERSION: "15"
+    MARKETING_VERSION: "0.8.0"
+    CURRENT_PROJECT_VERSION: "16"
     PRODUCT_BUNDLE_IDENTIFIER: co.gitwork.foundry
     # Leave the team blank for unsigned/ad-hoc local builds. Set DEVELOPMENT_TEAM
     # (and a Developer ID identity) in CI / a local override to produce a signed build.
@@ -53,6 +53,9 @@ targets:
     dependencies:
       - package: Sparkle
         product: Sparkle
+      # WidgetKit extension — embedded into Contents/PlugIns.
+      - target: FoundryWidgets
+        embed: true
     settings:
       base:
         PRODUCT_NAME: Foundry
@@ -70,6 +73,38 @@ targets:
           SWIFT_OPTIMIZATION_LEVEL: "-Owholemodule"
           SWIFT_COMPILATION_MODE: wholemodule
           # Hardened runtime is required for notarization.
+          ENABLE_HARDENED_RUNTIME: "YES"
+
+  FoundryWidgets:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "26.0"
+    entitlements:
+      path: FoundryWidgets/FoundryWidgets.entitlements
+    sources:
+      - path: FoundryWidgets
+        excludes:
+          - "Info.plist"
+          - "FoundryWidgets.entitlements"
+      # Snapshot model + App Group store shared with the main app (compiled into both).
+      - path: Foundry/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: co.gitwork.foundry.widgets
+        PRODUCT_NAME: FoundryWidgets
+        INFOPLIST_FILE: FoundryWidgets/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "YES"
+      configs:
+        Debug:
+          ENABLE_HARDENED_RUNTIME: "NO"
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-Owholemodule"
+          SWIFT_COMPILATION_MODE: wholemodule
           ENABLE_HARDENED_RUNTIME: "YES"
 
   FoundryTests:

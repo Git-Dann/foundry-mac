@@ -151,8 +151,18 @@ private struct CalendarAgendaView: View {
         if events.isEmpty { state = .loading }
         let now = Date()
         let end = Calendar.current.date(byAdding: .day, value: 30, to: now) ?? now
-        do { events = try await service.listEvents(from: now, to: end); state = .loaded(()) }
-        catch { state = .failed(error.userMessage) }
+        do {
+            events = try await service.listEvents(from: now, to: end)
+            state = .loaded(())
+            // Feed the Agenda widget (best-effort).
+            let upcoming = events.compactMap { event -> WidgetSnapshot.Event? in
+                guard let start = event.startDate else { return nil }
+                return .init(id: event.id, title: event.title, start: start, isAllDay: event.isAllDay)
+            }
+            AppGroupStore.update { $0.events = Array(upcoming.prefix(10)) }
+        } catch {
+            state = .failed(error.userMessage)
+        }
     }
 }
 

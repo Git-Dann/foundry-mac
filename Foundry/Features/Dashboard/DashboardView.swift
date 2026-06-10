@@ -99,6 +99,15 @@ struct DashboardView: View {
         // (non-super-admin) or any failure just leaves the card hidden.
         if isSuperAdmin {
             aiCost = try? await model.api.aiCost()
+            if let aiCost, aiCost.configured {
+                AppGroupStore.update { snapshot in
+                    snapshot.aiSpend = .init(
+                        today: aiCost.totalToday,
+                        monthToDate: aiCost.totalMonthToDate,
+                        currency: aiCost.commonCurrency ?? "USD"
+                    )
+                }
+            }
         }
     }
 }
