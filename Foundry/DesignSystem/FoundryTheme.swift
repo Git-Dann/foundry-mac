@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Brand colours, mirrored from the iOS app's asset catalog so the Apple family stays
-/// visually consistent. The app otherwise leans on the system font (SF) and standard
-/// controls for a first-class, native macOS feel.
+// Brand colours. The light palette mirrors the iOS asset catalog; dark palette adds the
+// DESIGN.md navy canvas (#0F172A surface-dark, #1E293B surface-dark-raised) for
+// dark-mode fidelity.
 extension Color {
     static let foundryBlue = Color("FoundryBlue")
     static let foundryPurple = Color("FoundryPurple")
@@ -10,6 +10,8 @@ extension Color {
     static let foundryInk = Color("FoundryInk")
     static let foundryMist = Color("FoundryMist")
     static let foundryMistBorder = Color("FoundryMistBorder")
+    // Dark palette — navy surface (DESIGN.md §dark-mode)
+    static let foundryDark = Color("FoundryDark")         // #0F172A canvas
 }
 
 extension DocumentStatus {

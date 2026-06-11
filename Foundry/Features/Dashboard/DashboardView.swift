@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Native Foundry HQ overview: greeting, headline metrics, and recent proposals.
+/// Foundry HQ — bento-grid dashboard matching the DESIGN.md FoundryCard pattern.
+/// Numbered widget cards, serif stat figures, mono data labels.
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
 
@@ -11,8 +12,7 @@ struct DashboardView: View {
     @State private var state: LoadState<Void> = .idle
 
     private var isSuperAdmin: Bool { model.auth.currentUser?.role == "SUPER_ADMIN" }
-
-    private let columns = [GridItem(.adaptive(minimum: 180), spacing: 16)]
+    private let twoCol = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
     var body: some View {
         content
@@ -30,48 +30,14 @@ struct DashboardView: View {
             ErrorStateView(message: message) { Task { await load() } }
         default:
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if let user = model.auth.currentUser {
-                        Text("Welcome back, \(user.displayName.components(separatedBy: " ").first ?? user.displayName)")
-                            .font(.title2.weight(.semibold))
-                    }
-
+                VStack(alignment: .leading, spacing: 20) {
+                    pageHeader
+                    metricGrid
                     if isSuperAdmin, let aiCost, aiCost.configured {
-                        AiSpendCard(summary: aiCost)
+                        aiSpendWidget(aiCost)
                     }
-
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        MetricCard(title: "PROPOSALS", value: "\(proposals.count)", systemImage: "doc.text", tint: .foundryBlue)
-                        MetricCard(title: "CLIENTS", value: clientsCount.map(String.init) ?? "—", systemImage: "building.2", tint: .foundryPurple)
-                        MetricCard(title: "CANDIDATES", value: stats.map { "\($0.total)" } ?? "—", systemImage: "person.crop.circle", tint: .blue)
-                        MetricCard(title: "RECHECK DUE", value: stats.map { "\($0.recheckDue)" } ?? "—", systemImage: "clock.badge.exclamationmark", tint: .orange)
-                    }
-
                     if !proposals.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Recent proposals")
-                                .font(.headline)
-                            ForEach(proposals.prefix(6)) { item in
-                                NavigationLink(value: ProposalRoute(id: item.id)) {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(item.title).foregroundStyle(.primary)
-                                            if let client = item.clientName, !client.isEmpty {
-                                                Text(client).font(.caption).foregroundStyle(.secondary)
-                                            }
-                                        }
-                                        Spacer()
-                                        StatusChip(text: item.status.label, tint: item.status.tint)
-                                        Text(Formatters.relative(item.updatedAt))
-                                            .font(.caption).foregroundStyle(.tertiary)
-                                    }
-                                    .padding(.vertical, 8)
-                                    .padding(.horizontal, 12)
-                                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
+                        recentDocsWidget
                     }
                 }
                 .padding(24)
@@ -80,12 +46,182 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Header
+
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if let user = model.auth.currentUser {
+                let first = user.displayName.components(separatedBy: " ").first ?? user.displayName
+                (Text(first).font(.system(size: 34, weight: .regular, design: .serif))
+                    + Text(" · Foundry HQ")
+                    .font(.system(size: 34, weight: .regular, design: .serif))
+                    .foregroundStyle(.secondary))
+            }
+            Text(Date(), format: Date.FormatStyle().weekday(.wide).month(.wide).day())
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .tracking(0.5)
+                .foregroundStyle(.tertiary)
+                .textCase(.uppercase)
+        }
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Metric widgets
+
+    private var metricGrid: some View {
+        LazyVGrid(columns: twoCol, spacing: 14) {
+            FoundryCard(index: 1, title: "Proposals") {
+                StatDisplay(value: "\(proposals.count)", label: "Total")
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            FoundryCard(index: 2, title: "Clients") {
+                StatDisplay(
+                    value: clientsCount.map(String.init) ?? "—",
+                    label: "Active"
+                )
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            FoundryCard(index: 3, title: "Candidates") {
+                StatDisplay(
+                    value: stats.map { "\($0.total)" } ?? "—",
+                    label: "In pipeline"
+                )
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            FoundryCard(index: 4, title: "Recheck Due") {
+                let due = stats?.recheckDue ?? 0
+                StatDisplay(
+                    value: "\(due)",
+                    label: "Flagged",
+                    tint: due > 0 ? .red : .primary
+                )
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    // MARK: - AI Spend widget
+
+    private func aiSpendWidget(_ cost: AiCostSummary) -> some View {
+        let currency = cost.commonCurrency ?? "USD"
+        let okProviders = cost.providers.filter { $0.status == .ok }
+
+        return FoundryCard(
+            index: 5,
+            title: "AI Spend",
+            trailing: {
+                HStack(spacing: 5) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.foundryPurple)
+                    Text("SUPER ADMIN")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(0.5)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        ) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .bottom, spacing: 28) {
+                    StatDisplay(
+                        value: Formatters.currency(cost.totalMonthToDate, code: currency),
+                        label: "This month",
+                        size: 36
+                    )
+                    StatDisplay(
+                        value: Formatters.currency(cost.totalToday, code: currency),
+                        label: "Today",
+                        size: 26
+                    )
+                    Spacer()
+                }
+                .padding(14)
+
+                if okProviders.count > 1 {
+                    FoundryDivider()
+                    VStack(spacing: 0) {
+                        ForEach(Array(okProviders.enumerated()), id: \.element.id) { idx, provider in
+                            HStack {
+                                Text(provider.providerLabel)
+                                    .font(.callout)
+                                if let m = provider.modelLabel, !m.isEmpty {
+                                    Text(m)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Spacer()
+                                Text(Formatters.currency(provider.monthToDate, code: provider.currency))
+                                    .font(.system(size: 13, design: .monospaced))
+                                    .monospacedDigit()
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            if idx < okProviders.count - 1 {
+                                FoundryDivider().padding(.horizontal, 14)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Recent Docs widget
+
+    private var recentDocsWidget: some View {
+        let recent = Array(proposals.prefix(8))
+        let cardIndex = isSuperAdmin && (aiCost?.configured ?? false) ? 6 : 5
+
+        return FoundryCard(index: cardIndex, title: "Recent Docs") {
+            VStack(spacing: 0) {
+                ForEach(Array(recent.enumerated()), id: \.element.id) { idx, item in
+                    NavigationLink(value: ProposalRoute(id: item.id)) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.title)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                if let client = item.clientName, !client.isEmpty {
+                                    Text(client)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            StatusChip(text: item.status.label, tint: item.status.tint)
+                            Text(Formatters.relative(item.updatedAt))
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 56, alignment: .trailing)
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                    }
+                    .buttonStyle(.plain)
+
+                    if idx < recent.count - 1 {
+                        FoundryDivider().padding(.horizontal, 14)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Load
+
     private func load() async {
         if proposals.isEmpty && stats == nil { state = .loading }
         do {
             async let proposalsTask = model.api.listProposals(sort: "updatedAt:desc")
-            async let clientsTask = try? model.api.listClients()
-            async let statsTask = try? model.api.codeClearStats()
+            async let clientsTask: [ClientListItem]? = try? model.api.listClients()
+            async let statsTask: CodeClearStats? = try? model.api.codeClearStats()
 
             proposals = try await proposalsTask
             clientsCount = (await clientsTask)?.count
@@ -95,8 +231,7 @@ struct DashboardView: View {
         } catch {
             state = .failed(error.userMessage)
         }
-        // Best-effort AI spend (Super-Admin only). Never affects the main dashboard state — a 403
-        // (non-super-admin) or any failure just leaves the card hidden.
+        // AI spend — super-admin only, best-effort, never affects main dashboard state.
         if isSuperAdmin {
             aiCost = try? await model.api.aiCost()
             if let aiCost, aiCost.configured {
@@ -108,89 +243,6 @@ struct DashboardView: View {
                     )
                 }
             }
-        }
-    }
-}
-
-/// Today + month-to-date billed AI spend, with a per-provider breakdown. Super-Admin only;
-/// hidden entirely when spend is unavailable. Plain card — no glass (system chrome only).
-private struct AiSpendCard: View {
-    let summary: AiCostSummary
-
-    private var currencyCode: String { summary.commonCurrency ?? "USD" }
-
-    var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles").foregroundStyle(Color.foundryPurple)
-                    Text("AI SPEND").font(.caption.monospaced()).foregroundStyle(.secondary)
-                    Spacer()
-                    Text("Super Admin").font(.caption2).foregroundStyle(.tertiary)
-                }
-                HStack(alignment: .top, spacing: 32) {
-                    stat("Today", summary.totalToday)
-                    stat("This month", summary.totalMonthToDate)
-                    Spacer()
-                }
-                if summary.providers.count > 1 || summary.providers.contains(where: { $0.status != .ok }) {
-                    Divider()
-                    ForEach(summary.providers) { provider in
-                        HStack {
-                            Text(provider.providerLabel).font(.callout)
-                            if let model = provider.modelLabel, !model.isEmpty {
-                                Text(model).font(.caption).foregroundStyle(.tertiary)
-                            }
-                            Spacer()
-                            switch provider.status {
-                            case .ok:
-                                Text(Formatters.currency(provider.monthToDate, code: provider.currency))
-                                    .monospacedDigit()
-                            case .notConfigured:
-                                Text("Not set up").font(.caption).foregroundStyle(.tertiary)
-                            case .error, .unknown:
-                                Text("Unavailable").font(.caption).foregroundStyle(.tertiary)
-                            }
-                        }
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
-        }
-    }
-
-    private func stat(_ label: String, _ amount: Double) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(Formatters.currency(amount, code: currencyCode))
-                .font(.system(size: 28, weight: .semibold, design: .rounded)).monospacedDigit()
-            Text(label).font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct MetricCard: View {
-    let title: String
-    let value: String
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: systemImage).foregroundStyle(tint)
-                    Spacer()
-                }
-                Text(value)
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                Text(title)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
         }
     }
 }

@@ -90,18 +90,28 @@ private struct ClientRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            InitialAvatar(name: item.name, size: 32, tint: .foundryBlue)
+
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.name).font(.body.weight(.medium)).lineLimit(1)
-                HStack(spacing: 6) {
+                Text(item.name)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                HStack(spacing: 0) {
                     Text("\(item.proposalCount) doc\(item.proposalCount == 1 ? "" : "s")")
-                    if item.hasCareClient { Text("· Care") }
-                    if !item.repoUrls.isEmpty { Text("· \(item.repoUrls.count) repo\(item.repoUrls.count == 1 ? "" : "s")") }
+                    if item.hasCareClient { Text(" · Care") }
+                    if !item.repoUrls.isEmpty {
+                        Text(" · \(item.repoUrls.count) repo\(item.repoUrls.count == 1 ? "" : "s")")
+                    }
                 }
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
+
             Spacer()
+
             StatusChip(text: item.status.label, tint: item.status.tint)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
     }
 }

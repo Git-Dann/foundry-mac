@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Care: the support-client roster + a live dashboard summary. Tap a client to open its
-/// conversations, tickets, draft actions, and analytics.
+/// Care: support-client roster with a bento overview strip. Tap a client for conversations,
+/// tickets, draft actions, and analytics.
 struct CareView: View {
     @Environment(AppModel.self) private var model
     @State private var clients: [SupportClient] = []
@@ -24,37 +24,81 @@ struct CareView: View {
             ErrorStateView(message: message) { Task { await load() } }
         default:
             List {
+                // Overview bento row — metric widgets inside a list section
                 if let dashboard {
-                    Section("Overview") {
-                        LabeledContent("Active clients", value: "\(dashboard.clientCount)")
-                        LabeledContent("Open tickets", value: "\(dashboard.openTicketCount)")
+                    Section {
+                        overviewWidgets(dashboard)
+                            .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                     }
+
                     if !dashboard.recentConversations.isEmpty {
-                        Section("Recent conversations") {
-                            ForEach(dashboard.recentConversations) { conversation in
-                                HStack(spacing: 10) {
-                                    Image(systemName: conversation.source.systemImage).foregroundStyle(.secondary).frame(width: 18)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(conversation.subject.isEmpty ? conversation.customerLabel : conversation.subject).lineLimit(1)
-                                        Text("\(conversation.client.name) · \(conversation.customerLabel)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                    }
-                                    Spacer()
-                                    if conversation.unread { Circle().fill(Color.foundryBlue).frame(width: 7, height: 7) }
-                                    Text(Formatters.relative(conversation.receivedAt)).font(.caption).foregroundStyle(.tertiary)
-                                }
+                        Section {
+                            ForEach(dashboard.recentConversations) { conv in
+                                ConversationRow(conversation: conv)
                             }
+                        } header: {
+                            Text("01 // RECENT")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .tracking(1.2)
+                                .foregroundStyle(.secondary)
+                                .textCase(nil)
                         }
                     }
                 }
-                Section("Clients") {
+
+                Section {
                     ForEach(clients) { client in
                         NavigationLink(value: client) { CareClientRow(client: client) }
                     }
+                } header: {
+                    Text("02 // CLIENTS")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .tracking(1.2)
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
                 }
             }
             .listStyle(.inset)
         }
     }
+
+    // MARK: - Overview widgets (bento strip)
+
+    @ViewBuilder
+    private func overviewWidgets(_ dashboard: SupportDashboard) -> some View {
+        HStack(spacing: 10) {
+            overviewMetric(
+                value: "\(dashboard.clientCount)",
+                label: "Clients"
+            )
+            Divider().frame(height: 40)
+            overviewMetric(
+                value: "\(dashboard.openTicketCount)",
+                label: "Open tickets",
+                tint: dashboard.openTicketCount > 0 ? .orange : .primary
+            )
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func overviewMetric(value: String, label: String, tint: Color = .primary) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 28, weight: .regular, design: .serif))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .tracking(1.0)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    // MARK: - Load
 
     private func load() async {
         if clients.isEmpty { state = .loading }
@@ -71,23 +115,72 @@ struct CareView: View {
     }
 }
 
+// MARK: - CareClientRow
+
 private struct CareClientRow: View {
     let client: SupportClient
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(client.name).fontWeight(.medium)
-            if let used = client.supportDaysUsed, let total = client.supportDaysPerMonth, total > 0 {
-                Text("\(used)/\(total) days").font(.caption).foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            InitialAvatar(name: client.name, size: 30, tint: .foundryBlue)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(client.name)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                if let used = client.supportDaysUsed, let total = client.supportDaysPerMonth, total > 0 {
+                    Text("\(used) / \(total) days")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
             }
+
             Spacer()
+
             if let unread = client.unreadCount, unread > 0 {
-                Text("\(unread)")
-                    .font(.caption2.weight(.bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.foundryBlue, in: Capsule())
+                UnreadDot(count: unread)
             }
-            StatusChip(text: client.isActive ? "Active" : "Inactive", tint: client.isActive ? .green : .secondary)
+            StatusChip(
+                text: client.isActive ? "Active" : "Inactive",
+                tint: client.isActive ? .green : .secondary
+            )
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+// MARK: - ConversationRow
+
+private struct ConversationRow: View {
+    let conversation: SupportDashboard.DashboardConversation
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: conversation.source.systemImage)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(width: 20, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(conversation.subject.isEmpty ? conversation.customerLabel : conversation.subject)
+                    .font(.body.weight(conversation.unread ? .semibold : .regular))
+                    .lineLimit(1)
+                Text("\(conversation.client.name) · \(conversation.customerLabel)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                if conversation.unread {
+                    Circle().fill(Color.foundryBlue).frame(width: 7, height: 7)
+                }
+                Text(Formatters.relative(conversation.receivedAt))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(.vertical, 2)
     }

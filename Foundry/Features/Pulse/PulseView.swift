@@ -111,44 +111,59 @@ private struct PulseScanRow: View {
     let scan: PulseScanSummary
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             HealthBadge(score: scan.healthScore, status: scan.status)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(scan.projectName).font(.body.weight(.medium)).lineLimit(1)
-                Text(scan.target).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(scan.projectName)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                Text(scan.target)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer()
-            StatusChip(text: scan.status.label, tint: scan.status.tint)
-            Text(Formatters.relative(scan.createdAt))
-                .font(.caption).foregroundStyle(.tertiary).frame(width: 64, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 4) {
+                StatusChip(text: scan.status.label, tint: scan.status.tint)
+                Text(Formatters.relative(scan.createdAt))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 6)
     }
 }
 
-/// Circular health-score badge — a spinner while the scan is running, the score (tinted by band)
-/// when known, a dash otherwise. Reused by scans, monitors, and leads.
+/// Health-score badge — editorial rounded-rect with large serif number, colored by band.
+/// Replaces the old filled circle; reused by scans, monitors, and leads.
 struct HealthBadge: View {
     let score: Int?
     var status: PulseScanStatus = .completed
-    var size: CGFloat = 34
+    var size: CGFloat = 40
+
+    var tint: Color { score.map { Color.pulseHealth($0) } ?? .secondary }
 
     var body: some View {
         ZStack {
             if status.isRunning {
                 ProgressView().controlSize(.small)
             } else if let score {
-                Circle().fill(Color.pulseHealth(score).opacity(0.15))
                 Text("\(score)")
-                    .font(.system(size: size * 0.36, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.pulseHealth(score))
+                    .font(.system(size: size * 0.5, weight: .semibold, design: .serif))
+                    .foregroundStyle(tint)
                     .monospacedDigit()
             } else {
-                Circle().fill(Color.secondary.opacity(0.12))
-                Image(systemName: "minus").foregroundStyle(.secondary)
+                Text("—")
+                    .font(.system(size: size * 0.38, design: .monospaced))
+                    .foregroundStyle(.tertiary)
             }
         }
         .frame(width: size, height: size)
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(tint.opacity(0.2), lineWidth: 0.75)
+        )
         .accessibilityLabel(accessibilityText)
     }
 

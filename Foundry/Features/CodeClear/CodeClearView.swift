@@ -104,24 +104,51 @@ private struct StatsSection: View {
     let stats: CodeClearStats
 
     var body: some View {
-        Section("Pipeline") {
-            LabeledContent("Total candidates", value: "\(stats.total)")
-            LabeledContent("Recheck due", value: "\(stats.recheckDue)")
-            if let avg = stats.avgThis {
-                LabeledContent("Avg score (this period)", value: String(format: "%.0f", avg))
-            }
-            if let pass = stats.passRateThis {
-                LabeledContent("Pass rate", value: String(format: "%.0f%%", pass * (pass <= 1 ? 100 : 1)))
-            }
-            if !stats.byStatus.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(stats.byStatus) { entry in
-                            StatusChip(text: "\(entry.status.label) · \(entry.count)", tint: entry.status.tint)
-                        }
-                    }
+        Section {
+            pipelineWidget
+                .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+    }
+
+    private var pipelineWidget: some View {
+        FoundryCard(index: 1, title: "Pipeline") {
+            HStack(alignment: .bottom, spacing: 0) {
+                metricCell(value: "\(stats.total)", label: "Total")
+                Divider().frame(height: 40).padding(.horizontal, 16)
+                metricCell(
+                    value: "\(stats.recheckDue)",
+                    label: "Recheck due",
+                    tint: stats.recheckDue > 0 ? .red : .primary
+                )
+                if let avg = stats.avgThis {
+                    Divider().frame(height: 40).padding(.horizontal, 16)
+                    metricCell(value: String(format: "%.0f", avg), label: "Avg score")
                 }
+                if let pass = stats.passRateThis {
+                    Divider().frame(height: 40).padding(.horizontal, 16)
+                    metricCell(
+                        value: String(format: "%.0f%%", pass * (pass <= 1 ? 100 : 1)),
+                        label: "Pass rate"
+                    )
+                }
+                Spacer()
             }
+            .padding(14)
+        }
+    }
+
+    private func metricCell(value: String, label: String, tint: Color = .primary) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 28, weight: .regular, design: .serif))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .tracking(1.0)
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -133,17 +160,24 @@ private struct CandidateRow: View {
         HStack(spacing: 12) {
             CandidateAvatar(url: candidate.avatarUrl, name: candidate.name)
             VStack(alignment: .leading, spacing: 3) {
-                Text(candidate.name).font(.body.weight(.medium)).lineLimit(1)
+                Text(candidate.name)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
                 Text("@\(candidate.githubHandle) · \(candidate.primaryStack)")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer()
             if let score = candidate.score?.overallScore {
-                Text(String(format: "%.0f", score)).font(.callout.weight(.semibold)).monospacedDigit()
+                Text(String(format: "%.0f", score))
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundStyle(score >= 70 ? .green : (score >= 50 ? .orange : .red))
+                    .monospacedDigit()
             }
             StatusChip(text: candidate.status.label, tint: candidate.status.tint)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
     }
 }
 
