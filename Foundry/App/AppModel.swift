@@ -15,6 +15,7 @@ final class AppModel {
     let store: CommitmentStore
     let network: NetworkMonitor
     let notifications: NotificationScheduler
+    let calendar: CalendarStore
 
     var selection: SidebarItem = .today
     var selectedCommitmentId: String?
@@ -38,6 +39,10 @@ final class AppModel {
             baseURL: { await MainActor.run { environment.baseURL } },
             token: { await MainActor.run { auth.token } }
         ))
+        self.calendar = CalendarStore(
+            baseURL: { await MainActor.run { environment.baseURL } },
+            token: { await MainActor.run { auth.token } }
+        )
 
         Commitment.webBase = environment.baseURL
         store.onChange = { [weak self] items in self?.itemsChanged(items) }
@@ -55,6 +60,8 @@ final class AppModel {
             auth.signInForPreview(email: "dan@gitwork.co.uk")
             let sample = SampleData.items(now: Date())
             store.loadForPreview(sample, settings: SampleData.settings)
+            let week = CalendarLayout.days(around: Date(), mode: .week)
+            calendar.loadForPreview(SampleData.events(week: week), from: week.first!, to: Calendar.current.date(byAdding: .day, value: 1, to: week.last!)!)
             selectedCommitmentId = sample.first { $0.source == .meeting && $0.state == .open }?.id
             return
         }
@@ -72,6 +79,7 @@ final class AppModel {
             notifications.requestAuthorizationIfNeeded()
         } else {
             store.deactivate()
+            calendar.clear()
             notifications.clearAll()
         }
     }
@@ -81,6 +89,7 @@ final class AppModel {
         Commitment.webBase = environment.baseURL
         auth.switchServer(to: environment.baseURL)
         store.deactivateKeepingCache()
+        calendar.clear()
         sessionChanged()
     }
 
@@ -173,13 +182,14 @@ final class AppModel {
 }
 
 enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
-    case today, upcoming, suggestions, done
+    case today, upcoming, calendar, suggestions, done
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .today: "Today"
         case .upcoming: "Upcoming"
+        case .calendar: "Calendar"
         case .suggestions: "Suggestions"
         case .done: "Done"
         }
@@ -188,7 +198,8 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .today: "sun.max"
-        case .upcoming: "calendar"
+        case .upcoming: "calendar.day.timeline.left"
+        case .calendar: "calendar"
         case .suggestions: "tray"
         case .done: "checkmark.circle"
         }

@@ -100,6 +100,34 @@ enum SampleData {
         ]
     }
 
+    /// A believable week of meetings around the sample commitments.
+    static func events(week: [Date]) -> [CalendarEvent] {
+        let cal = Calendar.current
+        func at(_ dayIndex: Int, _ h: Int, _ m: Int = 0) -> Date {
+            cal.date(bySettingHour: h, minute: m, second: 0, of: week[min(dayIndex, week.count - 1)])!
+        }
+        func e(_ id: String, _ title: String, _ d: Int, _ h: Int, _ m: Int, minutes: Int, people: Int = 2, meet: Bool = true) -> CalendarEvent {
+            CalendarEvent(id: id, title: title, start: at(d, h, m), end: at(d, h, m).addingTimeInterval(Double(minutes) * 60),
+                          isAllDay: false, location: nil, meetLink: meet ? URL(string: "https://meet.google.com/abc-defg-hij") : nil,
+                          htmlLink: URL(string: "https://calendar.google.com/"), attendees: people)
+        }
+        return [
+            e("1", "Gitwork stand-up", 0, 9, 30, minutes: 15, people: 6),
+            e("2", "Fairway weekly check-in", 0, 11, 0, minutes: 45),
+            e("3", "Gitwork stand-up", 1, 9, 30, minutes: 15, people: 6),
+            e("4", "Northwind x Gitwork", 1, 14, 30, minutes: 60, people: 3),
+            e("5", "Gitwork stand-up", 2, 9, 30, minutes: 15, people: 6),
+            e("6", "PollenIQ demo", 2, 13, 0, minutes: 30),
+            e("7", "Focus: proposals", 2, 15, 0, minutes: 90, people: 0, meet: false),
+            e("8", "Gitwork stand-up", 3, 9, 30, minutes: 15, people: 6),
+            e("9", "Acme Health handover", 3, 16, 0, minutes: 60, people: 4),
+            e("10", "Gitwork stand-up", 4, 9, 30, minutes: 15, people: 6),
+            e("11", "Leisure Tech retro", 4, 12, 0, minutes: 45, people: 5),
+            CalendarEvent(id: "12", title: "Team day out", start: week[min(5, week.count - 1)], end: cal.date(byAdding: .day, value: 1, to: week[min(5, week.count - 1)])!,
+                          isAllDay: true, location: "Manchester", meetLink: nil, htmlLink: nil, attendees: 8),
+        ]
+    }
+
     static let settings = CommitmentSettings(
         gmailEnabled: true, slackEnabled: true, meetingsEnabled: true, calendarEnabled: true,
         lastSyncedAt: Date().addingTimeInterval(-1200), syncing: false,

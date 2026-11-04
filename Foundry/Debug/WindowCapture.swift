@@ -36,6 +36,12 @@ enum WindowCapture {
                     model.selectedCommitmentId = model.store.items.first { $0.state == .suggested }?.id
                     try? await Task.sleep(for: .seconds(1))
                     save(w, to: dir.appending(path: "window-suggestions-\(name).png"))
+                    model.selection = .calendar
+                    w.setFrame(NSRect(x: 80, y: 80, width: 1440, height: 860), display: true)
+                    try? await Task.sleep(for: .seconds(1.5))
+                    save(w, to: dir.appending(path: "calendar-\(name).png"))
+                    model.selection = .today
+                    w.setFrame(NSRect(x: 80, y: 80, width: 1180, height: 720), display: true)
                 }
                 // The real panel and widget views, in on-screen windows with the system's popover
                 // material, so vibrancy and dark mode render as they do from the menu bar.

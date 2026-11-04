@@ -7,7 +7,15 @@ struct MainWindow: View {
 
     var body: some View {
         Group {
-            if model.auth.isSignedIn {
+            if model.auth.isSignedIn && model.selection == .calendar {
+                // The calendar wants the whole width, so it replaces the list and detail columns.
+                NavigationSplitView(columnVisibility: $columns) {
+                    Sidebar()
+                        .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
+                } detail: {
+                    CalendarScreen()
+                }
+            } else if model.auth.isSignedIn {
                 NavigationSplitView(columnVisibility: $columns) {
                     Sidebar()
                         .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
@@ -76,7 +84,7 @@ struct Sidebar: View {
         case .today: CommitmentGrouping.dueNowCount(items, now: now)
         case .upcoming: CommitmentGrouping.sections(items, now: now, include: [.next7, .later, .noDate]).reduce(0) { $0 + $1.items.count }
         case .suggestions: CommitmentGrouping.suggestions(items).count
-        case .done: 0
+        case .done, .calendar: 0
         }
     }
 }
@@ -96,6 +104,9 @@ struct CommitmentListView: View {
                     .listRowSeparator(.hidden)
                     .padding(.vertical, 4)
                 UndoBar().listRowSeparator(.hidden)
+            }
+            if let problem = SourceProblem.summary(model.store.settings.sourceStatus) {
+                SourceNotice(text: problem).listRowSeparator(.hidden)
             }
             switch model.selection {
             case .today:
@@ -122,6 +133,8 @@ struct CommitmentListView: View {
                     emptyRow("Nothing to review", detail: "When Foundry reads a promise in your email, Slack or meetings, it waits here for you to add it or not.")
                 }
                 ForEach(review) { SuggestionRow(commitment: $0).tag($0.id) }
+            case .calendar:
+                EmptyView()
             case .done:
                 let done = CommitmentGrouping.done(filtered)
                 if done.isEmpty { emptyRow("Nothing done in the last two weeks", detail: nil) }
@@ -160,7 +173,6 @@ struct CommitmentListView: View {
     private var subtitle: String {
         if model.store.isCheckingSources { return "Checking your sources…" }
         if let e = model.store.lastError { return e }
-        if let s = model.store.lastCheckSummary { return s }
         if let at = model.store.settings.lastSyncedAt { return "Sources read \(at.formatted(.relative(presentation: .named)))" }
         return ""
     }
@@ -187,5 +199,23 @@ struct CommitmentListView: View {
         return items.filter { c in
             [c.title, c.notes, c.counterpart, c.quote, c.evidenceLabel].compactMap { $0?.lowercased() }.contains { $0.contains(q) }
         }
+    }
+}
+
+/// Shown at the top of the list when a source couldn't be read. Plain words, one way to act.
+struct SourceNotice: View {
+    @Environment(\.openSettings) private var openSettings
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Text(text).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
+            Button("Sources…") { openSettings() }.controlSize(.small)
+        }
+        .font(.callout)
+        .padding(10)
+        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
     }
 }

@@ -278,7 +278,8 @@ final class CommitmentStore {
     static func summary(of r: CommitmentSyncResult) -> String {
         if r.status == "busy" { return "Already checking. The new suggestions will appear when it's done." }
         let found = r.added == 0 ? "Nothing new to review." : (r.added == 1 ? "1 new to review." : "\(r.added) new to review.")
-        return r.status == "partial" ? found + " Some sources couldn't be read; see Settings." : found
+        guard let problem = SourceProblem.summary(r.sources) else { return found }
+        return found + " " + problem
     }
 
     // MARK: Queue

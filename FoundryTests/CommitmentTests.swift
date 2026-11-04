@@ -206,3 +206,32 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(WidgetPublisher.snapshot([near], signedIn: false, now: now).items, [])
     }
 }
+
+final class SourceProblemTests: XCTestCase {
+    // The exact message production returned on 4 Nov 2026.
+    let credit = #"The AI read failed: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."},"request_id":"req_011CghzJ99FFwaYPmCZVf5gt"}"#
+
+    func testOutOfCreditReadsAsASentence() {
+        let s = SourceProblem.plain(credit)
+        XCTAssertFalse(s.contains("{"))
+        XCTAssertTrue(s.contains("out of credit"))
+    }
+
+    func testOtherJSONErrorsShowOnlyTheirMessage() {
+        let s = SourceProblem.plain(#"The AI read failed: 500 {"error":{"message":"Something odd happened"}}"#)
+        XCTAssertEqual(s, "The AI read failed: Something odd happened")
+    }
+
+    func testPlainMessagesAreKept() {
+        XCTAssertEqual(SourceProblem.plain("Your Foundry email isn't on a Slack account"), "Your Foundry email isn't on a Slack account")
+    }
+
+    func testSummaryNamesTheFailedSources() {
+        let bad = CommitmentSourceStatus(ok: false, message: credit, at: nil)
+        let good = CommitmentSourceStatus(ok: true, message: "40 open action items", at: nil)
+        let s = SourceProblem.summary(["gmail": bad, "slack": bad, "meeting": good])!
+        XCTAssertTrue(s.hasPrefix("Sent email and Slack couldn't be read."), s)
+        XCTAssertTrue(s.contains("out of credit"))
+        XCTAssertNil(SourceProblem.summary(["meeting": good]))
+    }
+}

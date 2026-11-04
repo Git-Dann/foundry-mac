@@ -159,7 +159,7 @@ struct CommitmentSettings: Codable, Hashable, Sendable {
     /// A failed source's own words, shown under its switch. Nil while it is working.
     func problem(for toggle: Toggle) -> String? {
         guard isOn(toggle), let status = sourceStatus[toggle.rawValue], !status.ok else { return nil }
-        return status.message
+        return SourceProblem.plain(status.message)
     }
 }
 
