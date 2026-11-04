@@ -24,6 +24,7 @@ struct CommitmentDetail: View {
                     header(c)
                     if c.source != .manual { evidence(c) }
                     details(c)
+                    if !c.isBoardTask && c.state != .suggested { PlanningFields(id: id) }
                     actions(c)
                 }
                 .padding(28)
@@ -89,7 +90,7 @@ struct CommitmentDetail: View {
 
     private func details(_ c: Commitment) -> some View {
         Form {
-            LabeledContent("Due") {
+            LabeledContent("Deadline") {
                 HStack {
                     Toggle("Due date", isOn: $hasDue).labelsHidden()
                         .onChange(of: hasDue) { _, on in

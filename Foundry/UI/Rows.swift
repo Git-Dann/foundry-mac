@@ -269,6 +269,8 @@ struct QuickAddField: View {
     @Environment(AppModel.self) private var model
     var prompt = "Add a to-do"
     var focusToken: Int = 0
+    /// Where it was typed: a list, Today, Someday… (words in the line still win).
+    var defaults: NewCommitment? = nil
     @State private var text = ""
     @FocusState private var focused: Bool
 
@@ -280,7 +282,7 @@ struct QuickAddField: View {
                 TextField(prompt, text: $text)
                     .textFieldStyle(.plain)
                     .focused($focused)
-                    .onSubmit { if model.store.add(text: text) != nil { text = "" } }
+                    .onSubmit { if model.store.add(text: text, defaults: defaults) != nil { text = "" } }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)

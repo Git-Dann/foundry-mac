@@ -165,26 +165,39 @@ struct GlassIconButton: View {
 
 /// "Today 17:00 · CAMPFIRE" — when, and whose.
 struct RowMeta: View {
+    @Environment(AppModel.self) private var model
     let commitment: Commitment
     var subtitle: String?
 
     private var isOverdue: Bool { (commitment.dueAt.map { $0 < Date() } ?? false) && commitment.state == .open }
 
     var body: some View {
+        let c = commitment
+        let listName = c.listId.flatMap { model.store.list(id: $0)?.name }
         let parts: [String] = [
-            commitment.isBoardTask ? commitment.counterpart : nil,
-            subtitle ?? (commitment.isBoardTask ? nil : commitment.counterpart),
+            c.isBoardTask ? c.counterpart : listName,
+            subtitle ?? (c.isBoardTask ? nil : c.counterpart),
         ].compactMap { $0 }.filter { !$0.isEmpty }
-        HStack(spacing: 4) {
-            if let due = commitment.dueAt, commitment.state == .open {
+        HStack(spacing: 6) {
+            if c.priority > 0 {
+                Text(c.priorityLevel.marks).fontWeight(.bold).foregroundStyle(c.priority == 3 ? .red : .orange)
+            }
+            if let due = c.dueAt, c.state == .open {
                 Text(DueText.string(due)).foregroundStyle(isOverdue ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-                if !parts.isEmpty { Text("·").foregroundStyle(.tertiary) }
+            }
+            if c.evening { Image(systemName: "moon.fill").foregroundStyle(.indigo).help("This Evening") }
+            if c.recurrence != nil { Image(systemName: "repeat").foregroundStyle(.secondary).help(Recurrence(rule: c.recurrence)?.title ?? "Repeats") }
+            if c.remindAt != nil { Image(systemName: "bell.fill").foregroundStyle(.secondary).help("Reminder set") }
+            if !c.checklist.isEmpty {
+                Label("\(c.checklist.filter(\.done).count)/\(c.checklist.count)", systemImage: "checklist").foregroundStyle(.secondary)
             }
             if !parts.isEmpty {
                 Text(parts.joined(separator: " · ")).foregroundStyle(.secondary).lineLimit(1)
             }
+            ForEach(c.tags.prefix(3), id: \.self) { Text("#" + $0).foregroundStyle(.tertiary) }
         }
         .font(.caption)
+        .imageScale(.small)
     }
 }
 

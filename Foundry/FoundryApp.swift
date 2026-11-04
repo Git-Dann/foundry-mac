@@ -75,8 +75,8 @@ struct CommitmentCommands: Commands {
             Button("Check for Updates…", action: checkForUpdates)
         }
         CommandGroup(replacing: .newItem) {
-            Button("New Commitment") {
-                if model.selection != .today && model.selection != .upcoming { model.selection = .today }
+            Button("New To-do") {
+                if [.calendar, .foundry, .done].contains(model.selection) { model.selection = .inbox }
                 model.openMainWindow()
                 model.requestQuickAddFocus()
             }
@@ -126,7 +126,7 @@ struct CommitmentCommands: Commands {
             Button("Check Sources Now") { Task { await model.store.checkSources() } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
             Divider()
-            ForEach(Array(SidebarItem.allCases.enumerated()), id: \.element) { index, item in
+            ForEach(Array(SidebarItem.navigable.prefix(9).enumerated()), id: \.element) { index, item in
                 Button(item.title) { model.selection = item; model.openMainWindow() }
                     .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
             }

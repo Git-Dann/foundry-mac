@@ -55,3 +55,16 @@ final class PlanTests: XCTestCase {
         XCTAssertNil(Recurrence(rule: "hourly"))
     }
 }
+
+final class ReminderPlanTests: XCTestCase {
+    func testAReminderIsScheduledEvenWithNudgesOff() {
+        let now = Date()
+        var c = Commitment.local(id: "r1", NewCommitment(title: "Call Valu"), now: now)
+        c.remindAt = now.addingTimeInterval(3600)
+        var prefs = NotificationPreferences()
+        prefs.overdueEnabled = false
+        prefs.digestEnabled = false
+        let plan = NotificationPlan.make(items: [c], now: now, prefs: prefs)
+        XCTAssertEqual(plan.map(\.id), ["commitments.remind.r1"])
+    }
+}
