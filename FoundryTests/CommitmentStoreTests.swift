@@ -26,7 +26,7 @@ actor FakeService: CommitmentsService {
 
     func list() async throws -> CommitmentsResponse {
         try check("list")
-        return CommitmentsResponse(commitments: server.values.sorted { $0.createdAt > $1.createdAt }, settings: settings)
+        return CommitmentsResponse(commitments: server.values.sorted { $0.createdAt > $1.createdAt }, settings: settings, lists: lists)
     }
     func create(_ new: NewCommitment) async throws -> Commitment {
         try check("create")
@@ -48,6 +48,18 @@ actor FakeService: CommitmentsService {
         return .init(status: syncAdvancesLastSynced ? "ok" : "partial", added: 0, sources: [:])
     }
     func updateSettings(_ s: CommitmentSettings) async throws -> CommitmentSettings { try check("settings"); return s }
+
+    var lists: [TodoList] = []
+    func createList(name: String, color: String?, symbol: String?, area: String?) async throws -> TodoList {
+        try check("createList")
+        let l = TodoList(id: "list\(lists.count + 1)", name: name, color: color, symbol: symbol, area: area, orderKey: Double(lists.count), archived: false)
+        lists.append(l)
+        return l
+    }
+    func updateList(_ list: TodoList) async throws -> TodoList { try check("updateList"); return list }
+    func deleteList(id: String) async throws { try check("deleteList"); lists.removeAll { $0.id == id } }
+    var reordered: [String] = []
+    func reorder(ids: [String]) async throws { try check("reorder"); reordered = ids }
 
     var board: [String: BoardTaskDTO] = [:]
     var boardFails = false

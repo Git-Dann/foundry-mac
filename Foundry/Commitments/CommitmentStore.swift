@@ -22,6 +22,7 @@ struct CommitmentCacheFile: Codable, Sendable {
     var settings: CommitmentSettings
     var loadedAt: Date?
     var outbox: [PendingOperation]
+    var lists: [TodoList]? = nil
 }
 
 /// Reads and writes the cache file. One file per signed-in person; removed on sign-out.
@@ -70,6 +71,7 @@ struct CommitmentCache: Sendable {
 @Observable
 final class CommitmentStore {
     private(set) var items: [Commitment] = []
+    private(set) var lists: [TodoList] = []
     private(set) var settings: CommitmentSettings = .empty
     private(set) var loadedAt: Date?
     private(set) var isRefreshing = false
@@ -114,6 +116,7 @@ final class CommitmentStore {
             settings = file.settings
             loadedAt = file.loadedAt
             outbox = file.outbox
+            lists = file.lists ?? []
         } else {
             items = []; settings = .empty; loadedAt = nil; outbox = []
         }
@@ -170,6 +173,7 @@ final class CommitmentStore {
         let response = try await service.list()
         isOffline = false
         settings = response.settings
+        lists = response.lists.filter { !$0.archived }.sorted { $0.orderKey < $1.orderKey }
         loadedAt = now()
         await loadBoard()
         if settings.gmailEnabled || settings.slackEnabled {
@@ -235,6 +239,61 @@ final class CommitmentStore {
     }
 
     func commitment(id: String) -> Commitment? { items.first { $0.id == id } }
+    func list(id: String?) -> TodoList? { id.flatMap { id in lists.first { $0.id == id } } }
+
+    // MARK: Lists
+
+    /// Lists are created and changed online (they're rare edits); a failure is said, not queued.
+    @discardableResult
+    func createList(name: String, color: String?, symbol: String?, area: String? = nil) async -> TodoList? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        do {
+            let list = try await service.createList(name: String(trimmed.prefix(80)), color: color, symbol: symbol, area: area)
+            lists.append(list)
+            persistAndNotify()
+            return list
+        } catch {
+            handle(error, context: "Couldn't create the list")
+            return nil
+        }
+    }
+
+    func updateList(_ list: TodoList) async {
+        guard let i = lists.firstIndex(where: { $0.id == list.id }) else { return }
+        let previous = lists[i]
+        lists[i] = list
+        persistAndNotify()
+        do { lists[i] = try await service.updateList(list) } catch {
+            lists[i] = previous
+            handle(error, context: "Couldn't save the list")
+        }
+        persistAndNotify()
+    }
+
+    func deleteList(_ id: String) async {
+        do {
+            try await service.deleteList(id: id)
+            lists.removeAll { $0.id == id }
+            for i in items.indices where items[i].listId == id { items[i].listId = nil }
+            persistAndNotify()
+        } catch {
+            handle(error, context: "Couldn't delete the list")
+        }
+    }
+
+    /// Drag to reorder: `ids` in their new order. Applied here at once, sent in one request.
+    func reorder(_ ids: [String]) {
+        let own = ids.filter { !$0.hasPrefix(Commitment.boardPrefix) && !$0.hasPrefix(Commitment.localPrefix) }
+        for (n, id) in ids.enumerated() {
+            if let i = items.firstIndex(where: { $0.id == id }) { items[i].orderKey = Double(n) }
+        }
+        persistAndNotify()
+        guard !own.isEmpty else { return }
+        Task {
+            do { try await service.reorder(ids: own) } catch { handle(error, context: "Couldn't save the order") }
+        }
+    }
 
     // MARK: Editing
 
@@ -247,13 +306,26 @@ final class CommitmentStore {
         return item
     }
 
-    /// Quick add: "Send the deck to Acme fri" → due Friday.
+    /// Quick add with the full grammar ("Call Valu #sales !! ~Clients every week fri 3pm").
+    /// `defaults` carries where it was typed: adding inside a list puts it in that list, inside
+    /// Today plans it for today, and so on. Words in the line win over the defaults.
     @discardableResult
-    func add(text: String) -> Commitment? {
-        let parsed = DueDateParser.parse(text, now: now())
-        let title = parsed.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    func add(text: String, defaults: NewCommitment? = nil) -> Commitment? {
+        let p = QuickAddParser.parse(text, now: now())
+        let title = p.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
-        return add(NewCommitment(title: String(title.prefix(200)), dueAt: parsed.dueAt))
+        var new = defaults ?? NewCommitment(title: "")
+        new.title = String(title.prefix(200))
+        if let d = p.dueAt { new.dueAt = d }
+        if !p.tags.isEmpty { new.tags = Array(Set(new.tags + p.tags)).sorted() }
+        if p.priority > 0 { new.priority = p.priority }
+        if let name = p.listName, let l = lists.first(where: { $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }) {
+            new.listId = l.id
+        }
+        if let r = p.recurrence { new.recurrence = r.rule }
+        if p.evening { new.evening = true; new.startAt = p.startAt }
+        if p.someday { new.someday = true; new.startAt = nil; new.evening = false }
+        return add(new)
     }
 
     func update(_ id: String, _ patch: CommitmentPatch) {
@@ -446,7 +518,7 @@ final class CommitmentStore {
 
     private func persistAndNotify() {
         if let userId {
-            cache.save(CommitmentCacheFile(userId: userId, items: items, settings: settings, loadedAt: loadedAt, outbox: outbox))
+            cache.save(CommitmentCacheFile(userId: userId, items: items, settings: settings, loadedAt: loadedAt, outbox: outbox, lists: lists))
         }
         notify()
     }
@@ -468,7 +540,10 @@ extension Commitment {
         Commitment(
             id: id, title: new.title, notes: new.notes, dueAt: new.dueAt, state: .open, source: .manual,
             counterpart: new.counterpart, quote: nil, evidenceLabel: nil, evidenceUrl: nil, evidenceAt: nil,
-            reason: nil, snoozedUntil: nil, doneAt: nil, createdAt: now, updatedAt: now
+            reason: nil, snoozedUntil: nil, doneAt: nil, createdAt: now, updatedAt: now,
+            listId: new.listId, tags: new.tags, priority: new.priority, startAt: new.startAt,
+            evening: new.evening, someday: new.someday, remindAt: new.remindAt, recurrence: new.recurrence,
+            orderKey: -now.timeIntervalSince1970
         )
     }
 }
