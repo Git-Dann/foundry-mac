@@ -42,6 +42,8 @@ final class AppModel {
     /// Bumped to move focus to the main window's quick-add field (⌘N).
     private(set) var focusQuickAddToken = 0
     private(set) var focusSearchToken = 0
+    /// The ⌘K command palette.
+    var paletteShown = false
     /// The last completion, for Undo.
     var lastCompleted: Commitment?
 

@@ -25,6 +25,13 @@ struct CommitmentDetail: View {
                     if c.source != .manual { evidence(c) }
                     details(c)
                     if !c.isBoardTask && c.state != .suggested { PlanningFields(id: id) }
+                    if !c.isBoardTask {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Notes").font(.headline)
+                            NotesEditor(markdown: $notes, onCommit: save)
+                                .frame(minHeight: 180)
+                        }
+                    }
                     actions(c)
                 }
                 .padding(28)
@@ -125,9 +132,6 @@ struct CommitmentDetail: View {
                 TextField("For", text: $counterpart, prompt: Text("Who it's for"))
                     .focused($focus, equals: .counterpart)
                     .onSubmit { save() }
-                TextField("Notes", text: $notes, prompt: Text("Anything to remember"), axis: .vertical)
-                    .lineLimit(3...10)
-                    .focused($focus, equals: .notes)
             }
         }
         .formStyle(.columns)

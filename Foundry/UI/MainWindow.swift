@@ -3,6 +3,7 @@ import SwiftUI
 struct MainWindow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     @State private var columns = NavigationSplitViewVisibility.all
 
     var body: some View {
@@ -36,6 +37,9 @@ struct MainWindow: View {
         }
         .frame(minWidth: 900, minHeight: 560)
         .buttonBorderShape(.capsule)
+        .sheet(isPresented: Binding(get: { model.paletteShown }, set: { model.paletteShown = $0 })) {
+            CommandPalette(model: model, openSettings: { openSettings() }, openList: { model.show(filter: .list($0.id)) })
+        }
         .onAppear {
             model.openWindowAction = { openWindow(id: "main") }
             model.refreshIfStale()

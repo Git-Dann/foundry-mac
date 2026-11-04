@@ -119,8 +119,10 @@ struct CommitmentCommands: Commands {
                 .disabled(model.lastCompleted == nil)
         }
         CommandGroup(after: .sidebar) {
-            Button("Search") { model.openMainWindow(); model.requestSearchFocus() }
+            Button("Command Palette…") { model.openMainWindow(); model.paletteShown = true }
                 .keyboardShortcut("k")
+            Button("Search") { model.openMainWindow(); model.requestSearchFocus() }
+                .keyboardShortcut("f")
             Button("Refresh") { Task { await model.store.refresh() } }
                 .keyboardShortcut("r")
             Button("Check Sources Now") { Task { await model.store.checkSources() } }
