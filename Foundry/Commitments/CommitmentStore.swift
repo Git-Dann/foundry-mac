@@ -94,6 +94,7 @@ final class CommitmentStore {
     @ObservationIgnored private let cache: CommitmentCache
     @ObservationIgnored private var userId: String?
     @ObservationIgnored private var flushing = false
+    @ObservationIgnored private var needsReload = false
     @ObservationIgnored private var lastAutoCheck: Date?
     @ObservationIgnored var onChange: (([Commitment]) -> Void)?
     @ObservationIgnored var onUnauthorized: (() -> Void)?
@@ -434,6 +435,8 @@ final class CommitmentStore {
         guard !flushing, userId != nil else { return }
         flushing = true
         defer { flushing = false }
+        needsReload = false
+        defer { if needsReload { needsReload = false; Task { try? await load() } } }
         while let op = outbox.first {
             do {
                 switch op {
@@ -459,7 +462,10 @@ final class CommitmentStore {
                         saved = task
                         if let b = boardItems.firstIndex(where: { $0.id == id }) { boardItems[b] = saved }
                     } else {
+                        let repeats = patch.state == .done && items.first(where: { $0.id == id })?.recurrence != nil
                         saved = try await service.update(id: id, patch)
+                        // Ticking a repeating to-do makes the server create the next one; fetch it.
+                        if repeats { needsReload = true }
                     }
                     // Keep later local edits if any were made while this was in flight.
                     if !outbox.dropFirst().contains(where: { $0.targetId == id }),
