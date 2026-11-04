@@ -127,6 +127,8 @@ struct Sidebar: View {
                 Button { creatingList = true } label: { Label("New List", systemImage: "plus") }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
+                    .disabled(!model.store.supportsPlanning)
+                    .help(model.store.supportsPlanning ? "Create a list" : "Lists turn on when Foundry is updated.")
             }
             let tags = Plan.tags(items)
             if !tags.isEmpty {

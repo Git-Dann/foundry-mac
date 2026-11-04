@@ -72,6 +72,8 @@ struct CommitmentCache: Sendable {
 final class CommitmentStore {
     private(set) var items: [Commitment] = []
     private(set) var lists: [TodoList] = []
+    /// False until the server says it has lists, tags, repeats… (see `CommitmentsResponse`).
+    private(set) var supportsPlanning = true
     private(set) var settings: CommitmentSettings = .empty
     private(set) var loadedAt: Date?
     private(set) var isRefreshing = false
@@ -175,6 +177,7 @@ final class CommitmentStore {
         isOffline = false
         settings = response.settings
         lists = response.lists.filter { !$0.archived }.sorted { $0.orderKey < $1.orderKey }
+        supportsPlanning = response.supportsPlanning
         loadedAt = now()
         await loadBoard()
         if settings.gmailEnabled || settings.slackEnabled {
@@ -290,7 +293,7 @@ final class CommitmentStore {
             if let i = items.firstIndex(where: { $0.id == id }) { items[i].orderKey = Double(n) }
         }
         persistAndNotify()
-        guard !own.isEmpty else { return }
+        guard !own.isEmpty, supportsPlanning else { return }
         Task {
             do { try await service.reorder(ids: own) } catch { handle(error, context: "Couldn't save the order") }
         }
@@ -441,7 +444,7 @@ final class CommitmentStore {
             do {
                 switch op {
                 case .create(let localId, let new):
-                    let saved = try await service.create(new)
+                    let saved = try await service.create(supportsPlanning ? new : new.withoutPlanning)
                     replaceLocalId(localId, with: saved)
                 case .update(let id, let patch):
                     guard !id.hasPrefix(Commitment.localPrefix) else { break }
@@ -463,7 +466,9 @@ final class CommitmentStore {
                         if let b = boardItems.firstIndex(where: { $0.id == id }) { boardItems[b] = saved }
                     } else {
                         let repeats = patch.state == .done && items.first(where: { $0.id == id })?.recurrence != nil
-                        saved = try await service.update(id: id, patch)
+                        let send = supportsPlanning ? patch : patch.withoutPlanning
+                        guard !send.isEmpty else { break }
+                        saved = try await service.update(id: id, send)
                         // Ticking a repeating to-do makes the server create the next one; fetch it.
                         if repeats { needsReload = true }
                     }

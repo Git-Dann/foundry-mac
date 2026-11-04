@@ -305,3 +305,19 @@ final class CommitmentStoreTests: XCTestCase {
         XCTAssertTrue(store.items.contains { $0.title == "Book dentist" })
     }
 }
+
+@MainActor
+final class OlderServerTests: XCTestCase {
+    func testAnOlderServerIsSentOnlyWhatItAccepts() async throws {
+        let json = #"{"commitments":[],"settings":{"gmailEnabled":false,"slackEnabled":false,"meetingsEnabled":true,"calendarEnabled":true,"lastSyncedAt":null,"syncing":false,"sourceStatus":{},"slackConnected":false}}"#
+        let r = try JSONDecoder.foundry.decode(CommitmentsResponse.self, from: Data(json.utf8))
+        XCTAssertFalse(r.supportsPlanning, "no `lists` key means an older server")
+        let p = CommitmentPatch(state: .done, tags: ["sales"], priority: 3).withoutPlanning
+        XCTAssertEqual(p.state, .done)
+        XCTAssertNil(p.tags)
+        XCTAssertNil(p.priority)
+        let n = NewCommitment(title: "x", tags: ["a"], priority: 2).withoutPlanning
+        XCTAssertTrue(n.tags.isEmpty)
+        XCTAssertEqual(n.priority, 0)
+    }
+}

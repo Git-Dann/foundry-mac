@@ -201,9 +201,12 @@ struct CommitmentsResponse: Codable, Sendable {
     var commitments: [Commitment]
     var settings: CommitmentSettings
     var lists: [TodoList] = []
+    /// Whether this server has lists, tags, priority, repeats… (it sends `lists` when it does).
+    /// An older server refuses those fields outright, so the app must not send them.
+    var supportsPlanning = true
 
-    init(commitments: [Commitment], settings: CommitmentSettings, lists: [TodoList] = []) {
-        self.commitments = commitments; self.settings = settings; self.lists = lists
+    init(commitments: [Commitment], settings: CommitmentSettings, lists: [TodoList] = [], supportsPlanning: Bool = true) {
+        self.commitments = commitments; self.settings = settings; self.lists = lists; self.supportsPlanning = supportsPlanning
     }
 
     init(from decoder: Decoder) throws {
@@ -211,6 +214,16 @@ struct CommitmentsResponse: Codable, Sendable {
         commitments = try c.decode([Commitment].self, forKey: .commitments)
         settings = try c.decode(CommitmentSettings.self, forKey: .settings)
         lists = try c.decodeIfPresent([TodoList].self, forKey: .lists) ?? []
+        supportsPlanning = c.contains(.lists)
+    }
+
+    enum CodingKeys: String, CodingKey { case commitments, settings, lists }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(commitments, forKey: .commitments)
+        try c.encode(settings, forKey: .settings)
+        try c.encode(lists, forKey: .lists)
     }
 }
 
@@ -330,6 +343,19 @@ struct CommitmentPatch: Equatable, Sendable, Codable {
         if let checklist { body["checklist"] = checklist.map { ["id": $0.id, "text": $0.text, "done": $0.done] } }
         if let orderKey { body["orderKey"] = orderKey }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+}
+
+extension CommitmentPatch {
+    /// The same edit with the planning fields removed, for a server that doesn't have them.
+    var withoutPlanning: CommitmentPatch {
+        CommitmentPatch(title: title, notes: notes, dueAt: dueAt, counterpart: counterpart, state: state, snoozedUntil: snoozedUntil)
+    }
+}
+
+extension NewCommitment {
+    var withoutPlanning: NewCommitment {
+        NewCommitment(title: title, dueAt: dueAt, notes: notes, counterpart: counterpart)
     }
 }
 

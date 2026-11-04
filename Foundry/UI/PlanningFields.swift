@@ -111,6 +111,17 @@ struct PlanningFields: View {
             }
             .formStyle(.grouped)
             .scrollDisabled(true)
+            .disabled(!model.store.supportsPlanning)
+            .overlay(alignment: .top) {
+                if !model.store.supportsPlanning {
+                    Label("Lists, tags, repeats and checklists turn on when Foundry is updated.", systemImage: "clock.arrow.circlepath")
+                        .font(.callout)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .glassEffect(.regular, in: .capsule)
+                        .padding(.top, 8)
+                }
+            }
             .onAppear { tagText = c.tags.joined(separator: ", ") }
             .onChange(of: c.tags) { _, new in tagText = new.joined(separator: ", ") }
         }
