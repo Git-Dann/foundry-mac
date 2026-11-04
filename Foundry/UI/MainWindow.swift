@@ -56,6 +56,8 @@ struct WideScreen {
         case .foundry: view = AnyView(FeedView())
         case .board: view = AnyView(KanbanView().navigationTitle("Board"))
         case .matrix: view = AnyView(MatrixView().navigationTitle("Priorities"))
+        case .focus: view = AnyView(FocusView(todoId: FocusSession.shared.todoId).navigationTitle("Focus"))
+        case .habits: view = AnyView(HabitsView().navigationTitle("Habits"))
         default: return nil
         }
     }
@@ -187,7 +189,15 @@ struct TodoListView: View {
     var body: some View {
         @Bindable var model = model
         let now = Date()
-        let items = matching(model.store.items)
+        let focusMode = FocusFilterMode.current()
+        let items = matching(model.store.items).filter { c in
+            guard c.state == .open else { return true }
+            switch focusMode {
+            case .everything: return true
+            case .todayOnly: return Plan.isToday(c, now: now)
+            case .boardTasksOnly: return c.isBoardTask
+            }
+        }
         let sections = sections(items, now: now)
         let canReorder = search.isEmpty && [.inbox, .today, .anytime, .someday, .filtered].contains(model.selection)
         List(selection: $model.selectedIds) {
@@ -326,6 +336,11 @@ struct TodoListView: View {
 
     private func subtitle(now: Date) -> String {
         if let e = model.store.lastError { return e }
+        switch FocusFilterMode.current() {
+        case .todayOnly: return "Focus is on: showing today only"
+        case .boardTasksOnly: return "Focus is on: showing board tasks only"
+        case .everything: break
+        }
         switch model.selection {
         case .today:
             let n = model.store.items.filter { Plan.isToday($0, now: now) }.count

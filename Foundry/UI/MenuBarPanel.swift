@@ -16,6 +16,7 @@ struct MenuBarPanel: View {
             if model.auth.isSignedIn {
                 header
                 VStack(spacing: 10) {
+                    FocusMenuBarItem()
                     QuickAddField()
                     UndoBar()
                 }

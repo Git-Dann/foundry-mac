@@ -219,12 +219,12 @@ final class AppModel {
 }
 
 enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
-    case inbox, today, upcoming, anytime, someday, done, calendar, board, matrix, foundry, filtered
+    case inbox, today, upcoming, anytime, someday, done, calendar, board, matrix, focus, habits, foundry, filtered
     var id: String { rawValue }
 
     /// The fixed destinations, in sidebar order (⌘1…⌘8).
     static let planning: [SidebarItem] = [.inbox, .today, .upcoming, .anytime, .someday, .done]
-    static let views: [SidebarItem] = [.calendar, .board, .matrix, .foundry]
+    static let views: [SidebarItem] = [.calendar, .board, .matrix, .focus, .habits, .foundry]
     static var navigable: [SidebarItem] { planning + views }
 
     var title: String {
@@ -238,6 +238,8 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .calendar: "Calendar"
         case .board: "Board"
         case .matrix: "Priorities"
+        case .focus: "Focus"
+        case .habits: "Habits"
         case .foundry: "Foundry"
         case .filtered: "List"
         }
@@ -254,6 +256,8 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .calendar: "calendar.day.timeline.left"
         case .board: "rectangle.split.3x1"
         case .matrix: "square.grid.2x2"
+        case .focus: "timer"
+        case .habits: "flame"
         case .foundry: "bubble.left.and.text.bubble.right"
         case .filtered: "list.bullet"
         }

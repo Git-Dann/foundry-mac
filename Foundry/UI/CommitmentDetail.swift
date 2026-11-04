@@ -148,6 +148,11 @@ struct CommitmentDetail: View {
             case .open:
                 Button("Mark done") { model.complete(id) }
                     .buttonStyle(.glassProminent)
+                Button("Focus", systemImage: "timer") {
+                    FocusSession.shared.start(todoId: id, todoTitle: c.title)
+                    model.selection = .focus
+                }
+                .buttonStyle(.glass)
                 if !c.isBoardTask {
                     Menu("Snooze") {
                         ForEach(SnoozeOption.allCases) { o in
