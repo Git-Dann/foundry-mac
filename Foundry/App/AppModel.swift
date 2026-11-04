@@ -2,60 +2,195 @@ import SwiftUI
 import AppKit
 import Observation
 
-/// Root application model. Owns the long-lived stores and the cross-cutting UI state
-/// (sidebar selection, menu→view command tokens). Injected into the SwiftUI environment.
+/// Owns the long-lived pieces (sign-in, the commitment store, reachability, notifications,
+/// widget feed, hotkey) and the little bit of UI state shared between the menu bar and window.
 @MainActor
 @Observable
 final class AppModel {
+    /// App Intents and the AppKit hotkey reach the running app through this.
+    static let shared = AppModel()
+
     let environment: AppEnvironment
     let auth: AuthStore
-    let api: FoundryAPIClient
+    let store: CommitmentStore
     let network: NetworkMonitor
-    let google: GoogleAuthStore
+    let notifications: NotificationScheduler
 
-    var selection: SidebarItem? = .dashboard
-    var lastRefresh: Date?
+    var selection: SidebarItem = .today
+    var selectedCommitmentId: String?
+    /// Bumped to move focus to the main window's quick-add field (⌘N).
+    private(set) var focusQuickAddToken = 0
+    private(set) var focusSearchToken = 0
+    /// The last completion, for Undo.
+    var lastCompleted: Commitment?
 
-    // Menu / toolbar actions are delivered to the focused feature view by bumping a token
-    // the view observes via `.onChange`. Keeps menus decoupled from feature internals.
-    private(set) var refreshToken = 0
-    private(set) var newProposalToken = 0
-    private(set) var searchToken = 0
+    @ObservationIgnored private var refreshTimer: Timer?
+    @ObservationIgnored private var wasOnline = true
 
-    init() {
+    private init() {
         let environment = AppEnvironment()
-        let auth = AuthStore()
+        let auth = AuthStore(baseURL: environment.baseURL)
         self.environment = environment
         self.auth = auth
-        self.api = FoundryAPIClient(environment: environment, auth: auth)
         self.network = NetworkMonitor()
-        self.google = GoogleAuthStore()
-    }
+        self.notifications = NotificationScheduler()
+        self.store = CommitmentStore(service: CommitmentsAPI(
+            baseURL: { await MainActor.run { environment.baseURL } },
+            token: { await MainActor.run { auth.token } }
+        ))
 
-    func requestRefresh() {
-        refreshToken &+= 1
-        lastRefresh = Date()
-    }
-
-    func requestNewProposal() {
-        selection = .proposals
-        newProposalToken &+= 1
-    }
-
-    func requestSearch() {
-        searchToken &+= 1
-    }
-
-    func signIn() {
-        Task { await auth.signIn(baseURL: environment.baseURL) }
-    }
-
-    /// Open the hosted Foundry web app (⌘L) or a specific hosted path in the default browser.
-    func openWeb(path: String? = nil) {
-        var url = environment.webAppURL
-        if let path {
-            for segment in path.split(separator: "/") { url.appendPathComponent(String(segment)) }
+        Commitment.webBase = environment.baseURL
+        store.onChange = { [weak self] items in self?.itemsChanged(items) }
+        store.onUnauthorized = { [weak self] in self?.auth.handleUnauthorized(); self?.sessionChanged() }
+        network.onChange = { [weak self] online in
+            guard let self else { return }
+            if online && !self.wasOnline { Task { await self.store.refresh() } }
+            self.wasOnline = online
         }
-        NSWorkspace.shared.open(url)
+        // As the unit-test host the app stays inert: no Keychain session, network or notifications.
+        guard NSClassFromString("XCTestCase") == nil else { return }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--demo") || ProcessInfo.processInfo.arguments.contains("--render-screenshots") {
+            store.onChange = nil  // sample data must never reach real notifications or the widget
+            auth.signInForPreview(email: "dan@gitwork.co.uk")
+            let sample = SampleData.items(now: Date())
+            store.loadForPreview(sample, settings: SampleData.settings)
+            selectedCommitmentId = sample.first { $0.source == .meeting && $0.state == .open }?.id
+            return
+        }
+        #endif
+        sessionChanged()
+        startTimer()
+    }
+
+    // MARK: Session
+
+    func sessionChanged() {
+        if let user = auth.currentUser, auth.isSignedIn {
+            store.activate(userId: user.id)
+            Task { await store.refresh() }
+            notifications.requestAuthorizationIfNeeded()
+        } else {
+            store.deactivate()
+            notifications.clearAll()
+        }
+    }
+
+    /// Advanced → API base URL changed.
+    func serverChanged() {
+        Commitment.webBase = environment.baseURL
+        auth.switchServer(to: environment.baseURL)
+        store.deactivateKeepingCache()
+        sessionChanged()
+    }
+
+    func signOut() {
+        auth.signOut()
+        sessionChanged()
+    }
+
+    func handleURL(_ url: URL) {
+        if AuthCallback.isAuthCallback(url) {
+            auth.handleCallback(url)
+            sessionChanged()
+            return
+        }
+        // foundry://commitment/<id> (from the widget or a notification) opens it in the window.
+        if url.scheme == "foundry", url.host == "commitment" {
+            let id = url.lastPathComponent
+            showInWindow(id: id.isEmpty ? nil : id)
+        }
+    }
+
+    // MARK: Refresh
+
+    /// Quiet background refresh: every 5 minutes while signed in. Opening the menu bar or window
+    /// also refreshes when the list is over a minute old.
+    private func startTimer() {
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.auth.isSignedIn else { return }
+                await self.store.refresh()
+            }
+        }
+    }
+
+    func refreshIfStale() {
+        guard auth.isSignedIn, store.isStale else { return }
+        Task { await store.refresh() }
+    }
+
+    private func itemsChanged(_ items: [Commitment]) {
+        WidgetPublisher.publish(items, signedIn: auth.isSignedIn)
+        notifications.reschedule(items: items)
+    }
+
+    // MARK: Actions shared by menu bar, window, notifications and intents
+
+    func complete(_ id: String) {
+        guard let c = store.commitment(id: id) else { return }
+        store.complete(id)
+        lastCompleted = c
+    }
+
+    func undoComplete() {
+        guard let c = lastCompleted else { return }
+        store.update(c.id, CommitmentPatch(state: c.state == .suggested ? .open : c.state, snoozedUntil: c.snoozedUntil.map { .set($0) } ?? .clear))
+        lastCompleted = nil
+    }
+
+    func requestQuickAddFocus() { focusQuickAddToken &+= 1 }
+    func requestSearchFocus() { focusSearchToken &+= 1 }
+
+    func showInWindow(id: String?) {
+        if let id, let c = store.commitment(id: id) {
+            selection = c.state == .suggested ? .suggestions : (c.state == .done ? .done : (sidebarItem(for: c)))
+            selectedCommitmentId = id
+        }
+        openMainWindow()
+    }
+
+    private func sidebarItem(for c: Commitment) -> SidebarItem {
+        let g = CommitmentGrouping.group(c, now: Date())
+        return (g == .overdue || g == .today) ? .today : .upcoming
+    }
+
+    /// Opens (or brings forward) the main window. Set by the SwiftUI scene once it exists.
+    @ObservationIgnored var openWindowAction: (() -> Void)?
+
+    func openMainWindow() {
+        NSApp.activate()
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true && $0.isVisible }) {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openWindowAction?()
+        }
+    }
+
+    func openFoundryWeb() {
+        NSWorkspace.shared.open(environment.webAppURL.appending(path: "app/backstage").appending(queryItems: [URLQueryItem(name: "area", value: "commitments")]))
+    }
+}
+
+enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
+    case today, upcoming, suggestions, done
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .today: "Today"
+        case .upcoming: "Upcoming"
+        case .suggestions: "Suggestions"
+        case .done: "Done"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .today: "sun.max"
+        case .upcoming: "calendar"
+        case .suggestions: "tray"
+        case .done: "checkmark.circle"
+        }
     }
 }

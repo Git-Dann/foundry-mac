@@ -7,6 +7,7 @@ import Observation
 @Observable
 final class NetworkMonitor {
     private(set) var isOnline = true
+    @ObservationIgnored var onChange: ((Bool) -> Void)?
 
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "co.gitwork.foundry.network-monitor")
@@ -14,7 +15,11 @@ final class NetworkMonitor {
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
-            Task { @MainActor in self?.isOnline = online }
+            Task { @MainActor in
+                guard let self, self.isOnline != online else { return }
+                self.isOnline = online
+                self.onChange?(online)
+            }
         }
         monitor.start(queue: queue)
     }

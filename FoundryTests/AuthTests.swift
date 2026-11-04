@@ -45,12 +45,33 @@ final class AuthTests: XCTestCase {
         XCTAssertNil(AuthCallback.value(named: "token", in: errorURL))
     }
 
-    func testWebDestinationResolvesAgainstBase() {
-        let base = URL(string: "https://foundry.gitwork.co.uk")!
-        XCTAssertEqual(
-            WebDestination(path: "app/docs/123", title: "Doc").resolvedURL(base: base).absoluteString,
-            "https://foundry.gitwork.co.uk/app/docs/123"
-        )
-        XCTAssertEqual(WebDestination(path: nil, title: "Home").resolvedURL(base: base), base)
+    func testOnlyTheAuthCallbackHostCountsAsSignIn() {
+        XCTAssertTrue(AuthCallback.isAuthCallback(URL(string: "foundry://auth-callback#token=a")!))
+        XCTAssertFalse(AuthCallback.isAuthCallback(URL(string: "foundry://commitment/abc")!))
+        XCTAssertFalse(AuthCallback.isAuthCallback(URL(string: "https://auth-callback")!))
     }
+
+    func testEachServerHasItsOwnKeychainSlot() {
+        XCTAssertEqual(AuthStore.tokenKey(for: AppEnvironment.productionBaseURL), "auth.mobileJWT", "Production keeps the existing slot")
+        XCTAssertEqual(AuthStore.tokenKey(for: URL(string: "http://localhost:3100")!), "auth.mobileJWT@localhost:3100")
+        XCTAssertNotEqual(AuthStore.tokenKey(for: URL(string: "https://preview.vercel.app")!), AuthStore.tokenKey(for: AppEnvironment.productionBaseURL))
+    }
+
+    @MainActor
+    func testSigningOutOfOneServerLeavesAnotherSignedIn() {
+        let keychain = MemoryKeychain()
+        try? keychain.set("prod-token", for: AuthStore.tokenKey(for: AppEnvironment.productionBaseURL))
+        let auth = AuthStore(keychain: keychain, baseURL: URL(string: "http://localhost:3100")!)
+        XCTAssertFalse(auth.isSignedIn)
+        auth.handleUnauthorized()
+        auth.switchServer(to: AppEnvironment.productionBaseURL)
+        XCTAssertEqual(auth.token, "prod-token")
+    }
+}
+
+final class MemoryKeychain: KeychainStoring {
+    var values: [String: String] = [:]
+    func set(_ value: String, for key: String) throws { values[key] = value }
+    func get(_ key: String) throws -> String? { values[key] }
+    func remove(_ key: String) throws { values[key] = nil }
 }

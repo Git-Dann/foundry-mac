@@ -2,41 +2,41 @@ import Foundation
 
 /// App Group shared by the main app and the widget extension.
 ///
-/// On macOS (unlike iOS) `group.*` App Groups don't require a provisioning profile — an
-/// ad-hoc/unsigned build just triggers a one-time system consent prompt for cross-process
-/// container access (macOS 15+). Once the app is Developer ID-signed with the group registered
-/// to the team, the prompt goes away.
+/// On macOS `group.*` App Groups don't need a provisioning profile. An ad-hoc build triggers a
+/// one-time consent prompt for cross-process container access; a Developer ID build with the
+/// group registered to the team doesn't.
 enum FoundryAppGroup {
     static let identifier = "group.co.gitwork.foundry"
-    static let snapshotKey = "widget.snapshot.v1"
+    static let snapshotKey = "widget.commitments.v2"
 }
 
-/// The data the widgets render. Written by the main app whenever fresh data loads; widgets only
-/// READ this (no network, no auth in the extension). Each writer updates just its slice.
-struct WidgetSnapshot: Codable, Sendable {
-    struct AiSpend: Codable, Sendable {
-        var today: Double
-        var monthToDate: Double
-        var currency: String
-    }
-
-    struct Event: Codable, Sendable, Identifiable {
+/// What the widget renders. Written by the app whenever its list changes; the widget only reads
+/// it (no network and no sign-in in the extension). Titles only: no quotes or notes leave the app.
+struct WidgetSnapshot: Codable, Sendable, Equatable {
+    struct Item: Codable, Sendable, Identifiable, Equatable {
         var id: String
         var title: String
-        var start: Date
-        var isAllDay: Bool
+        var dueAt: Date?
+        var counterpart: String?
     }
 
-    struct Scan: Codable, Sendable, Identifiable {
-        var id: String
-        var name: String
-        var score: Int?
-    }
-
-    var aiSpend: AiSpend?
-    var events: [Event] = []
-    var scans: [Scan] = []
+    var signedIn: Bool = false
+    /// Open commitments due by the end of tomorrow, plus overdue ones, soonest first.
+    var items: [Item] = []
+    var reviewCount: Int = 0
     var updatedAt: Date = .distantPast
 
     static let empty = WidgetSnapshot()
+
+    /// Overdue and due-today items as of `date` (the widget calls this per timeline entry).
+    func today(at date: Date, calendar: Calendar = .current) -> [Item] {
+        items.filter { item in
+            guard let due = item.dueAt else { return false }
+            return due < date || calendar.isDate(due, inSameDayAs: date)
+        }
+    }
+
+    func isOverdue(_ item: Item, at date: Date) -> Bool {
+        (item.dueAt.map { $0 < date }) ?? false
+    }
 }

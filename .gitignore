@@ -35,3 +35,4 @@ ExportOptions.local.plist
 
 # macOS cruft
 .DS_Store
+*.profraw
