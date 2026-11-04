@@ -538,8 +538,9 @@ final class CommitmentStore {
 
     #if DEBUG
     /// Screenshots and previews only.
-    func loadForPreview(_ items: [Commitment], settings: CommitmentSettings = .empty) {
+    func loadForPreview(_ items: [Commitment], settings: CommitmentSettings = .empty, lists: [TodoList] = SampleData.lists) {
         self.items = items
+        self.lists = lists
         self.settings = settings
         self.loadedAt = now()
     }

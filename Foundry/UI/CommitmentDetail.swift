@@ -99,7 +99,7 @@ struct CommitmentDetail: View {
         Form {
             LabeledContent("Deadline") {
                 HStack {
-                    Toggle("Due date", isOn: $hasDue).labelsHidden()
+                    Toggle("Deadline", isOn: $hasDue).labelsHidden().toggleStyle(.switch).controlSize(.small)
                         .onChange(of: hasDue) { _, on in
                             guard loaded else { return }
                             if on, c.dueAt == nil {

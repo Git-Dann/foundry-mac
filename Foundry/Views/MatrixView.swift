@@ -198,9 +198,6 @@ private struct MatrixItem: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             CommitmentRow(commitment: commitment, compact: true)
-            if commitment.priority > 0 {
-                PriorityMarks(priority: commitment.priority)
-            }
         }
         .padding(.horizontal, 4)
         .background(model.selectedCommitmentId == commitment.id ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.clear),

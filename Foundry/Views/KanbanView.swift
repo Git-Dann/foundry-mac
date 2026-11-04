@@ -51,7 +51,7 @@ struct KanbanView: View {
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 16) {
                     KanbanColumn(
-                        title: "Inbox", symbol: "tray", tint: .secondary, listId: nil,
+                        title: "Inbox", symbol: "tray", tint: .blue, listId: nil,
                         items: items.filter { $0.listId == nil || !known.contains($0.listId!) }
                     )
                     ForEach(lists) { list in
@@ -179,9 +179,6 @@ private struct KanbanCard: View {
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 RowMeta(commitment: commitment, subtitle: lines.subtitle)
-            }
-            if commitment.priority > 0 {
-                PriorityMarks(priority: commitment.priority)
             }
         }
         .padding(12)

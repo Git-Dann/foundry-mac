@@ -171,6 +171,18 @@ struct GlassIconButton: View {
 /// "Today 17:00 · CAMPFIRE" — when, and whose.
 struct RowMeta: View {
     @Environment(AppModel.self) private var model
+
+    @ViewBuilder private func marks(_ c: Commitment) -> some View {
+        if c.priority > 0 {
+            Text(c.priorityLevel.marks).fontWeight(.bold).foregroundStyle(c.priority == 3 ? .red : .orange)
+        }
+    }
+
+    @ViewBuilder private func due(_ c: Commitment) -> some View {
+        if let d = c.dueAt, c.state == .open {
+            Text(DueText.string(d)).foregroundStyle(isOverdue ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+        }
+    }
     let commitment: Commitment
     var subtitle: String?
 
@@ -183,23 +195,32 @@ struct RowMeta: View {
             c.isBoardTask ? c.counterpart : listName,
             subtitle ?? (c.isBoardTask ? nil : c.counterpart),
         ].compactMap { $0 }.filter { !$0.isEmpty }
-        HStack(spacing: 6) {
-            if c.priority > 0 {
-                Text(c.priorityLevel.marks).fontWeight(.bold).foregroundStyle(c.priority == 3 ? .red : .orange)
+        // Full details when there's room; in a narrow card, just priority, when and where.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                marks(c)
+                due(c)
+                if c.evening { Image(systemName: "moon.fill").foregroundStyle(.indigo).help("This Evening") }
+                if c.recurrence != nil { Image(systemName: "repeat").foregroundStyle(.secondary).help(Recurrence(rule: c.recurrence)?.title ?? "Repeats") }
+                if c.remindAt != nil { Image(systemName: "bell.fill").foregroundStyle(.secondary).help("Reminder set") }
+                if !c.checklist.isEmpty {
+                    Label("\(c.checklist.filter(\.done).count)/\(c.checklist.count)", systemImage: "checklist").foregroundStyle(.secondary)
+                }
+                if !parts.isEmpty { Text(parts.joined(separator: " · ")).foregroundStyle(.secondary) }
+                ForEach(c.tags.prefix(3), id: \.self) { Text("#" + $0).foregroundStyle(.tertiary) }
             }
-            if let due = c.dueAt, c.state == .open {
-                Text(DueText.string(due)).foregroundStyle(isOverdue ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+            .fixedSize()
+            HStack(spacing: 6) {
+                marks(c)
+                due(c)
+                if let first = parts.first { Text(first).foregroundStyle(.secondary) }
             }
-            if c.evening { Image(systemName: "moon.fill").foregroundStyle(.indigo).help("This Evening") }
-            if c.recurrence != nil { Image(systemName: "repeat").foregroundStyle(.secondary).help(Recurrence(rule: c.recurrence)?.title ?? "Repeats") }
-            if c.remindAt != nil { Image(systemName: "bell.fill").foregroundStyle(.secondary).help("Reminder set") }
-            if !c.checklist.isEmpty {
-                Label("\(c.checklist.filter(\.done).count)/\(c.checklist.count)", systemImage: "checklist").foregroundStyle(.secondary)
+            .fixedSize()
+            HStack(spacing: 6) {
+                marks(c)
+                due(c)
             }
-            if !parts.isEmpty {
-                Text(parts.joined(separator: " · ")).foregroundStyle(.secondary).lineLimit(1)
-            }
-            ForEach(c.tags.prefix(3), id: \.self) { Text("#" + $0).foregroundStyle(.tertiary) }
+            .fixedSize()
         }
         .font(.caption)
         .imageScale(.small)

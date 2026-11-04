@@ -39,12 +39,21 @@ enum ScreenshotRenderer {
                 render(view, size: size, appearance: ap, to: dir.appending(path: "widget-\(fam == .systemSmall ? "small" : fam == .systemMedium ? "medium" : "large")-\(name).png"))
             }
             render(QuickAddPanelView(onClose: {}).environment(model), size: nil, width: 560, appearance: ap, to: dir.appending(path: "quickadd-\(name).png"))
+            let full = CGSize(width: 1100, height: 720)
+            render(KanbanView().environment(model), size: full, appearance: ap, to: dir.appending(path: "board-\(name).png"))
+            render(MatrixView().environment(model), size: full, appearance: ap, to: dir.appending(path: "matrix-\(name).png"))
+            render(FocusView(todoId: "e").environment(model), size: CGSize(width: 800, height: 640), appearance: ap, to: dir.appending(path: "focus-\(name).png"))
+            render(HabitsView().environment(model), size: CGSize(width: 800, height: 560), appearance: ap, to: dir.appending(path: "habits-\(name).png"))
+            render(CommitmentDetail(id: "c").environment(model), size: CGSize(width: 640, height: 1100), appearance: ap, to: dir.appending(path: "detail-\(name).png"))
+            model.selection = .upcoming
+            render(MainWindow().environment(model), size: CGSize(width: 1280, height: 760), appearance: ap, to: dir.appending(path: "upcoming-\(name).png"), titled: true)
+            model.selection = .today
         }
         NSApp.terminate(nil)
         return true
     }
 
-    private static func render<V: View>(_ view: V, size: CGSize?, width: CGFloat? = nil, appearance: NSAppearance, to url: URL, titled: Bool = false) {
+    static func render<V: View>(_ view: V, size: CGSize?, width: CGFloat? = nil, appearance: NSAppearance, to url: URL, titled: Bool = false) {
         let host = NSHostingView(rootView: view.environment(\.colorScheme, appearance.name == .darkAqua ? .dark : .light))
         let fitting = host.fittingSize
         let frameSize = size ?? CGSize(width: width ?? fitting.width, height: fitting.height)
@@ -56,6 +65,10 @@ enum ScreenshotRenderer {
         window.appearance = appearance
         window.contentView = host
         window.setContentSize(frameSize)
+        // Far off every display and fully transparent: rendering must never put a window on screen.
+        window.setFrameOrigin(NSPoint(x: -40_000, y: -40_000))
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
         window.orderFrontRegardless()
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
@@ -68,6 +81,12 @@ enum ScreenshotRenderer {
 
 /// Believable sample commitments for screenshots and previews. Not used with a real account.
 enum SampleData {
+    static let lists: [TodoList] = [
+        TodoList(id: "l1", name: "Clients", color: "blue", symbol: "briefcase", area: "Work", orderKey: 0, archived: false),
+        TodoList(id: "l2", name: "Hiring", color: "purple", symbol: "person.2", area: "Work", orderKey: 1, archived: false),
+        TodoList(id: "l3", name: "Home", color: "green", symbol: "house", area: "Personal", orderKey: 2, archived: false),
+    ]
+
     static func items(now: Date) -> [Commitment] {
         let cal = Calendar.current
         func at(_ days: Int, _ hour: Int) -> Date {
@@ -86,7 +105,7 @@ enum SampleData {
                        evidenceAt: nil, reason: nil, snoozedUntil: nil, doneAt: nil,
                        createdAt: now.addingTimeInterval(-300_000), updatedAt: now, boardStatus: status)
         }
-        return [
+        var items = [
             c("a", "Send Northwind the revised timeline", due: at(-1, 17), source: .gmail, who: "Priya, Northwind",
               quote: "I'll send over the revised timeline by Monday so you can share it with the board.",
               label: "Re: Phase two timing", url: "https://mail.google.com/"),
@@ -107,6 +126,21 @@ enum SampleData {
             board("t2", "Book the handover call with Absurd", due: at(2, 17), client: "Campfire", status: "TODO"),
             board("t3", "Retry payment flow on Android", due: at(-1, 17), client: "Wedge", status: "IN_REVIEW"),
         ]
+        func tweak(_ id: String, _ f: (inout Commitment) -> Void) {
+            if let i = items.firstIndex(where: { $0.id == id }) { f(&items[i]) }
+        }
+        tweak("a") { $0.listId = "l1"; $0.priority = 3; $0.tags = ["sales"] }
+        tweak("b") { $0.listId = "l1"; $0.startAt = cal.startOfDay(for: now); $0.priority = 2 }
+        tweak("c") {
+            $0.listId = "l2"; $0.startAt = cal.startOfDay(for: now); $0.evening = true; $0.recurrence = "weekly"
+            $0.tags = ["hiring", "q4"]; $0.remindAt = at(0, 18)
+            $0.notes = "## Before the call\nCheck the **day rate** against the rate card.\n\n- Last year's quote\n- [ ] Harry's notes\n- [x] Budget sign-off"
+            $0.checklist = [ChecklistItem(text: "Read the quote", done: true), ChecklistItem(text: "Compare with rate card"), ChecklistItem(text: "Reply to Harry")]
+        }
+        tweak("e") { $0.listId = "l1"; $0.priority = 1 }
+        tweak("f") { $0.someday = true; $0.dueAt = nil; $0.listId = "l3" }
+        tweak("g") { $0.listId = "l1"; $0.tags = ["bug"] }
+        return items
     }
 
     /// A believable week of meetings around the sample commitments.
