@@ -84,7 +84,7 @@ struct CommitmentDetail: View {
             }
         }
         .padding(14)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .background(.fill.quinary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func details(_ c: Commitment) -> some View {
@@ -138,22 +138,24 @@ struct CommitmentDetail: View {
             switch c.state {
             case .suggested:
                 Button("Add to my to-dos") { model.store.accept(id) }
-                    .buttonStyle(.borderedProminent)
-                Button("Not mine") { model.store.dismiss(id) }
+                    .buttonStyle(.glassProminent)
+                Button("Not mine") { model.store.dismiss(id) }.buttonStyle(.glass)
             case .open:
                 Button("Mark done") { model.complete(id) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                 if !c.isBoardTask {
                     Menu("Snooze") {
                         ForEach(SnoozeOption.allCases) { o in
                             Button(o.title) { model.store.snooze(id, until: o.until(from: Date())) }
                         }
                     }
+                    .menuStyle(.button)
+                    .buttonStyle(.glass)
                     .fixedSize()
-                    Button("Dismiss") { model.store.dismiss(id) }
+                    Button("Dismiss") { model.store.dismiss(id) }.buttonStyle(.glass)
                 }
             case .done, .dismissed:
-                Button("Reopen") { model.store.reopen(id) }
+                Button("Reopen") { model.store.reopen(id) }.buttonStyle(.glass)
             }
             Spacer()
             if c.source == .manual {

@@ -43,6 +43,7 @@ struct MainWindow: View {
             }
         }
         .frame(minWidth: 820, minHeight: 520)
+        .buttonBorderShape(.capsule)
         .onAppear {
             model.openWindowAction = { openWindow(id: "main") }
             model.refreshIfStale()
@@ -110,10 +111,17 @@ struct CommitmentListView: View {
                 QuickAddField(prompt: "Add a to-do. Try “Send Acme the deck fri”", focusToken: model.focusQuickAddToken)
                     .listRowSeparator(.hidden)
                     .padding(.vertical, 4)
-                if model.selection == .today {
-                    SuggestionsCard().listRowSeparator(.hidden)
-                }
                 UndoBar().listRowSeparator(.hidden)
+            }
+            if model.selection == .today {
+                let review = CommitmentGrouping.suggestions(filtered)
+                if !review.isEmpty {
+                    Section {
+                        ForEach(review) { SuggestionRow(commitment: $0).tag($0.id) }
+                    } header: {
+                        SuggestionsHeader(count: review.count)
+                    }
+                }
             }
             switch model.selection {
             case .today:
@@ -150,9 +158,11 @@ struct CommitmentListView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(notes, id: \.self) { SourceFootnote(text: $0) }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(.bar)
+                .glassEffect(.regular, in: .capsule)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
             }
         }
         .searchable(text: $search, placement: .toolbar, prompt: "Search to-dos")

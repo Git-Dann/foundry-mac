@@ -49,7 +49,7 @@ enum WindowCapture {
                 }
                 // The real panel and widget views, in on-screen windows with the system's popover
                 // material, so vibrancy and dark mode render as they do from the menu bar.
-                await hosted(MenuBarPanel().environment(model), width: 360, height: nil, to: dir.appending(path: "menubar-\(name).png"))
+                await hosted(MenuBarPanel().environment(model), width: 400, height: nil, to: dir.appending(path: "menubar-\(name).png"))
                 let snap = WidgetPublisher.snapshot(model.store.items, signedIn: true)
                 for (fam, label, size) in [(WidgetFamily.systemSmall, "small", CGSize(width: 170, height: 170)), (.systemMedium, "medium", CGSize(width: 364, height: 170)), (.systemLarge, "large", CGSize(width: 364, height: 382))] {
                     await hosted(TodayWidgetView(snapshot: snap, date: Date(), family: fam).padding(16).tint(Color("AccentColor")),

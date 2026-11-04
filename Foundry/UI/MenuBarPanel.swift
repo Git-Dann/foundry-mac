@@ -2,6 +2,10 @@ import SwiftUI
 
 /// The menu-bar window. Renders straight from the store's in-memory (cached) list, so it opens
 /// at once; a refresh runs behind it only when the list is over a minute old.
+///
+/// Liquid Glass (macOS 26+): the panel is already glass, so glass goes on the CONTROLS only
+/// (quick add, the round header buttons, Add/Not mine). The list itself is plain content on
+/// the panel; glass layered on glass reads as muddy, which is what the old grey slabs did.
 struct MenuBarPanel: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
@@ -11,23 +15,22 @@ struct MenuBarPanel: View {
         VStack(spacing: 0) {
             if model.auth.isSignedIn {
                 header
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     QuickAddField()
-                    SuggestionsCard()
                     UndoBar()
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-                Divider()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
                 list
-                Divider()
                 footer
             } else {
-                SignInPrompt(compact: true).padding(20)
+                SignInPrompt(compact: true).padding(24)
             }
         }
-        .frame(width: 360)
-        .animation(.easeOut(duration: 0.15), value: model.lastCompleted?.id)
+        .frame(width: 400)
+        .buttonBorderShape(.capsule)
+        .animation(.smooth(duration: 0.25), value: model.lastCompleted?.id)
+        .animation(.smooth(duration: 0.25), value: model.store.items.map(\.state))
         .onAppear {
             model.openWindowAction = { openWindow(id: "main") }
             model.refreshIfStale()
@@ -35,75 +38,156 @@ struct MenuBarPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Text("To-dos").font(.headline)
-            Spacer()
-            if model.store.isRefreshing || model.store.isCheckingSources {
-                ProgressView().controlSize(.small)
-            }
-            Button {
-                Task { await model.store.checkSources() }
-            } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.borderless)
-                .help("Check sources now")
-                .disabled(model.store.isCheckingSources)
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
-    }
-
-    private var list: some View {
         let now = Date()
-        let sections = CommitmentGrouping.sections(model.store.items, now: now, include: [.overdue, .today, .next7, .later, .noDate])
-        return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                if sections.isEmpty {
-                    Text(model.store.loadedAt == nil ? "Loading your to-dos…" : "Nothing to do. A good day.")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 28)
-                }
-                ForEach(sections, id: \.group) { section in
-                    SectionHeader(title: section.group.title, count: section.items.count, tint: section.group == .overdue ? .red : nil)
-                    ForEach(section.items) { c in
-                        CommitmentRow(commitment: c, compact: true)
-                            .padding(.horizontal, 12)
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(now.formatted(.dateTime.weekday(.wide)))
+                    .font(.title2.weight(.bold))
+                Text(PanelSummary.line(model.store.items, now: now))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+            }
+            Spacer()
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    GlassIconButton(symbol: "arrow.clockwise", help: "Refresh", spinning: model.store.isRefreshing || model.store.isCheckingSources) {
+                        Task { await model.store.checkSources() }
+                    }
+                    GlassIconButton(symbol: "macwindow", help: "Open the Foundry window") {
+                        model.showInWindow(id: nil)
                     }
                 }
             }
-            .padding(.bottom, 8)
         }
-        .frame(minHeight: 120, maxHeight: 460)
-        .scrollBounceBehavior(.basedOnSize)
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 14)
+    }
+
+    /// A native List with Sections: system spacing, section headers, keyboard, swipe actions.
+    private var list: some View {
+        let now = Date()
+        let sections = CommitmentGrouping.sections(model.store.items, now: now, include: [.overdue, .today, .next7, .later, .noDate])
+        let review = CommitmentGrouping.suggestions(model.store.items)
+        return List {
+            if !review.isEmpty {
+                Section {
+                    ForEach(review.prefix(3)) { SuggestionRow(commitment: $0, compact: true) }
+                } header: {
+                    SuggestionsHeader(count: review.count)
+                }
+            }
+            ForEach(sections, id: \.group) { section in
+                Section {
+                    ForEach(section.items.prefix(section.group == .later || section.group == .noDate ? 4 : 50)) { c in
+                        CommitmentRow(commitment: c, compact: true)
+                    }
+                } header: {
+                    Text(section.group.title)
+                        .foregroundStyle(section.group == .overdue ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                }
+            }
+        }
+        .listStyle(.inset)
+        .contentMargins(.vertical, 4, for: .scrollContent)
+        .scrollContentBackground(.hidden)
+        .overlay {
+            if sections.isEmpty && review.isEmpty {
+                ContentUnavailableView(
+                    model.store.loadedAt == nil ? "Loading" : "Nothing to do",
+                    systemImage: model.store.loadedAt == nil ? "hourglass" : "checkmark.circle",
+                    description: Text(model.store.loadedAt == nil ? "Fetching your to-dos." : "A good day.")
+                )
+            }
+        }
+        .frame(height: 440)
     }
 
     private var footer: some View {
         HStack(spacing: 10) {
             if model.store.isOffline || !model.network.isOnline {
-                Label("Offline", systemImage: "wifi.slash")
-                    .foregroundStyle(.secondary)
-                    .help(model.store.pendingCount > 0 ? "\(model.store.pendingCount) change(s) will be sent when you're back online." : "Showing what was saved.")
-            } else if let error = model.store.lastError {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
-                    .help(error)
+                Label("Offline · showing what was saved", systemImage: "wifi.slash")
+            } else if let problem = model.store.boardProblem {
+                Label(problem, systemImage: "exclamationmark.circle").lineLimit(1).help(problem)
             } else if let at = model.store.loadedAt {
-                Text("Updated \(at.formatted(.relative(presentation: .named)))").foregroundStyle(.tertiary)
+                Text("Updated \(at.formatted(.relative(presentation: .named)))")
             }
             Spacer()
-            Button("Open Window") { model.showInWindow(id: nil) }
-                .buttonStyle(.borderless)
             Button { openSettings() } label: { Image(systemName: "gearshape") }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help("Settings")
         }
-        .font(.callout)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .font(.caption)
+        .foregroundStyle(.tertiary)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+        .overlay(alignment: .top) { Divider().opacity(0.5) }
     }
 }
+
+enum PanelSummary {
+    /// "1 due today · 13 on your boards" / "Overdue: 2 · 1 due today" / "All clear".
+    static func line(_ items: [Commitment], now: Date) -> String {
+        let overdue = CommitmentGrouping.sections(items, now: now, include: [.overdue]).first?.items.count ?? 0
+        let today = CommitmentGrouping.sections(items, now: now, include: [.today]).first?.items.count ?? 0
+        let board = items.filter { $0.isBoardTask && $0.state == .open }.count
+        var parts: [String] = []
+        if overdue > 0 { parts.append("\(overdue) overdue") }
+        if today > 0 { parts.append("\(today) due today") }
+        if board > 0 { parts.append("\(board) on your boards") }
+        return parts.isEmpty ? "All clear" : parts.joined(separator: " · ")
+    }
+}
+
+/// A round glass button for the panel header.
+struct GlassIconButton: View {
+    let symbol: String
+    let help: String
+    var spinning = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .symbolEffect(.rotate, isActive: spinning)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
+
+
+/// "Today 17:00 · CAMPFIRE" — when, and whose.
+struct RowMeta: View {
+    let commitment: Commitment
+    var subtitle: String?
+
+    private var isOverdue: Bool { (commitment.dueAt.map { $0 < Date() } ?? false) && commitment.state == .open }
+
+    var body: some View {
+        let parts: [String] = [
+            commitment.isBoardTask ? commitment.counterpart : nil,
+            subtitle ?? (commitment.isBoardTask ? nil : commitment.counterpart),
+        ].compactMap { $0 }.filter { !$0.isEmpty }
+        HStack(spacing: 4) {
+            if let due = commitment.dueAt, commitment.state == .open {
+                Text(DueText.string(due)).foregroundStyle(isOverdue ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                if !parts.isEmpty { Text("·").foregroundStyle(.tertiary) }
+            }
+            if !parts.isEmpty {
+                Text(parts.joined(separator: " · ")).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .font(.caption)
+    }
+}
+
 
 struct SectionHeader: View {
     let title: String
@@ -170,7 +254,7 @@ struct SignInPrompt: View {
                 Text(model.auth.isAuthenticating ? "Waiting for your browser…" : "Sign in with Foundry")
                     .frame(minWidth: 180)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .controlSize(compact ? .regular : .large)
             if model.auth.isAuthenticating {
                 Button("Cancel") { model.auth.cancelSignIn() }.buttonStyle(.borderless)

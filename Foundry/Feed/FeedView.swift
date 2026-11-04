@@ -31,11 +31,18 @@ struct FeedView: View {
             }
         }
         .listStyle(.inset)
+        .contentMargins(.vertical, 12, for: .scrollContent)
+        // Messages arrive after the list first lays out; a List keeps the row heights it measured
+        // for the earlier content, which overlapped rows. Re-lay out when the feed changes.
+        .id(feed.items.map(\.id))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let problem = feed.problem {
                 SourceFootnote(text: problem)
-                    .padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(.bar)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular, in: .capsule)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
             }
         }
         .navigationTitle("Foundry")
@@ -61,7 +68,7 @@ struct FeedRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(item.author).fontWeight(.semibold)
-                if item.kind == .mention { BoardTag(client: item.clientName) }
+                if item.kind == .mention { Text("· \(item.clientName)").foregroundStyle(.secondary) }
                 Text(item.at.formatted(.relative(presentation: .named)))
                     .foregroundStyle(.tertiary)
                 Spacer(minLength: 6)
@@ -76,7 +83,7 @@ struct FeedRow: View {
                         model.store.add(NewCommitment(title: item.suggestedToDo, notes: String(item.text.prefix(4000)), counterpart: item.clientName))
                         model.feed.clear(item.id)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.small)
                 }
                 .buttonStyle(.borderless)
@@ -86,9 +93,9 @@ struct FeedRow: View {
             Text(item.text)
                 .lineLimit(3)
                 .foregroundStyle(.secondary)
-                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .contextMenu {

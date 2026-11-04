@@ -55,17 +55,23 @@ struct CalendarScreen: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            Button("Today") { anchor = Date() }
-                .keyboardShortcut("t", modifiers: .command)
-            ControlGroup {
-                Button { step(-1) } label: { Image(systemName: "chevron.left") }
-                    .help(mode == .week ? "Previous week" : "Previous day")
-                    .keyboardShortcut(.leftArrow, modifiers: .command)
-                Button { step(1) } label: { Image(systemName: "chevron.right") }
-                    .help(mode == .week ? "Next week" : "Next day")
-                    .keyboardShortcut(.rightArrow, modifiers: .command)
+            GlassEffectContainer(spacing: 6) {
+                HStack(spacing: 6) {
+                    Button { step(-1) } label: { Image(systemName: "chevron.left").frame(width: 18, height: 18) }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .help(mode == .week ? "Previous week" : "Previous day")
+                        .keyboardShortcut(.leftArrow, modifiers: .command)
+                    Button("Today") { anchor = Date() }
+                        .buttonStyle(.glass)
+                        .keyboardShortcut("t", modifiers: .command)
+                    Button { step(1) } label: { Image(systemName: "chevron.right").frame(width: 18, height: 18) }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .help(mode == .week ? "Next week" : "Next day")
+                        .keyboardShortcut(.rightArrow, modifiers: .command)
+                }
             }
-            .fixedSize()
         }
         .padding(.horizontal, 20)
         .padding(.top, 14)
@@ -346,7 +352,7 @@ private struct EventDetail: View {
                 Label("\(event.attendees) other\(event.attendees == 1 ? "" : "s")", systemImage: "person.2").font(.callout)
             }
             HStack {
-                if let meet = event.meetLink { Button("Join") { NSWorkspace.shared.open(meet) }.buttonStyle(.borderedProminent) }
+                if let meet = event.meetLink { Button("Join") { NSWorkspace.shared.open(meet) }.buttonStyle(.glassProminent) }
                 if let link = event.htmlLink { Button("Open in Google Calendar") { NSWorkspace.shared.open(link) } }
             }
             .controlSize(.small)
@@ -409,7 +415,6 @@ private struct InboxPanel: View {
             Text("No date yet").font(.system(size: 22, weight: .bold)).padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 4)
             Text("Drag onto the calendar to give it a time.").font(.callout).foregroundStyle(.secondary).padding(.horizontal, 16).padding(.bottom, 8)
             QuickAddField(prompt: "Add a to-do").padding(.horizontal, 12).padding(.bottom, 6)
-            SuggestionsCard().padding(.horizontal, 12).padding(.bottom, 6)
             List {
                 if undated.isEmpty {
                     Text("Nothing waiting. Everything has a date.").foregroundStyle(.secondary).listRowSeparator(.hidden)
@@ -442,6 +447,6 @@ private struct CalendarNotice: View {
             Button("Open Foundry") { NSWorkspace.shared.open(model.environment.webAppURL) }
         }
         .padding(12)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .background(.fill.quinary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }

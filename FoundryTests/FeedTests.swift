@@ -34,3 +34,23 @@ final class FeedTests: XCTestCase {
         XCTAssertTrue(items.first!.suggestedToDo.hasPrefix("Reply to Luke (Wedge): "))
     }
 }
+
+final class DisplayTests: XCTestCase {
+    func c(_ title: String) -> Commitment {
+        Commitment(id: "x", title: title, notes: nil, dueAt: nil, state: .open, source: .calendar, counterpart: nil, quote: nil,
+                   evidenceLabel: nil, evidenceUrl: nil, evidenceAt: nil, reason: nil, snoozedUntil: nil, doneAt: nil,
+                   createdAt: Date(), updatedAt: Date())
+    }
+
+    func testFollowUpsNamePeopleNotAddresses() {
+        let l = Display.lines(for: c("Follow up with luke.mcfarland@bigwedgegolf.com after “Wedge x Gitwork”"))
+        XCTAssertEqual(l.title, "Follow up with Luke McFarland")
+        XCTAssertEqual(l.subtitle, "bigwedgegolf.com · After “Wedge x Gitwork”")
+        XCTAssertNil(Display.organisation(ofEmail: "nasir@gmail.com"), "a personal mail service names no company")
+    }
+
+    func testABoardTagMovesToTheSubtitle() {
+        XCTAssertEqual(Display.lines(for: c("[Handover] Confirm DPA signed")), .init(title: "Confirm DPA signed", subtitle: "Handover"))
+        XCTAssertEqual(Display.lines(for: c("Send the deck")).title, "Send the deck")
+    }
+}
