@@ -13,7 +13,17 @@ import Observation
 final class AuthStore {
     static let tokenKey = "auth.mobileJWT"
 
+    /// One Keychain slot per server. Production keeps the original slot; any other host (a
+    /// preview or local server) gets its own, so a 401 from one server can never sign you out
+    /// of another.
+    nonisolated static func tokenKey(for baseURL: URL) -> String {
+        if baseURL == AppEnvironment.productionBaseURL { return tokenKey }
+        let host = baseURL.host ?? "unknown"
+        return tokenKey + "@" + host + (baseURL.port.map { ":\($0)" } ?? "")
+    }
+
     private let keychain: KeychainStoring
+    private var slot: String
 
     private(set) var token: String?
     private(set) var currentUser: FoundryUser?
@@ -22,13 +32,41 @@ final class AuthStore {
 
     var isSignedIn: Bool { token != nil }
 
-    init(keychain: KeychainStoring = KeychainStore()) {
+    init(keychain: KeychainStoring = AuthStore.defaultKeychain(), baseURL: URL = AppEnvironment.productionBaseURL) {
         self.keychain = keychain
-        // Restore an existing session on launch.
-        if let stored = (try? keychain.get(Self.tokenKey)) ?? nil, !stored.isEmpty {
+        self.slot = Self.tokenKey(for: baseURL)
+        restore()
+    }
+
+    /// Restore the session saved for the current server.
+    private func restore() {
+        if let stored = (try? keychain.get(slot)) ?? nil, !stored.isEmpty {
             token = stored
             currentUser = FoundryUser(jwt: stored)
+        } else {
+            token = nil
+            currentUser = nil
         }
+    }
+
+    /// The API base URL changed: use that server's sign-in (if any), leaving the others alone.
+    func switchServer(to baseURL: URL) {
+        let next = Self.tokenKey(for: baseURL)
+        guard next != slot else { return }
+        slot = next
+        lastError = nil
+        restore()
+    }
+
+    /// Debug builds can use a separate Keychain slot (`-debug.keychainService <name>`), so testing
+    /// against a local server never replaces the real sign-in.
+    nonisolated static func defaultKeychain() -> KeychainStoring {
+        #if DEBUG
+        if let service = UserDefaults.standard.string(forKey: "debug.keychainService"), !service.isEmpty {
+            return KeychainStore(service: service)
+        }
+        #endif
+        return KeychainStore()
     }
 
     /// Open the Foundry web sign-in in the user's default browser.
@@ -44,7 +82,7 @@ final class AuthStore {
         isAuthenticating = false
 
         if let jwt = AuthCallback.token(from: url), !jwt.isEmpty {
-            try? keychain.set(jwt, for: Self.tokenKey)
+            try? keychain.set(jwt, for: slot)
             token = jwt
             currentUser = FoundryUser(jwt: jwt)
             lastError = nil
@@ -62,7 +100,7 @@ final class AuthStore {
     }
 
     func signOut() {
-        try? keychain.remove(Self.tokenKey)
+        try? keychain.remove(slot)
         token = nil
         currentUser = nil
         lastError = nil
@@ -73,4 +111,12 @@ final class AuthStore {
         signOut()
         lastError = AppError.notAuthenticated.errorDescription
     }
+
+    #if DEBUG
+    /// Screenshots only: a signed-in look without touching the Keychain.
+    func signInForPreview(email: String) {
+        token = "preview"
+        currentUser = FoundryUser(id: "preview", email: email, name: nil, role: "STAFF", permissions: [])
+    }
+    #endif
 }

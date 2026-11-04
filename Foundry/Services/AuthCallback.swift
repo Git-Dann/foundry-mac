@@ -6,7 +6,7 @@ enum AuthCallback {
     static let scheme = "foundry"
 
     static func isAuthCallback(_ url: URL) -> Bool {
-        url.scheme?.lowercased() == scheme
+        url.scheme?.lowercased() == scheme && url.host?.lowercased() == "auth-callback"
     }
 
     static func token(from url: URL) -> String? { value(named: "token", in: url) }

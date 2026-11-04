@@ -13,7 +13,7 @@ options:
       file: true
 
 attributes:
-  LastUpgradeCheck: "2620"
+  LastUpgradeCheck: "2700"
 
 packages:
   Sparkle:
@@ -23,8 +23,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.9.0"
-    CURRENT_PROJECT_VERSION: "19"
+    MARKETING_VERSION: "2.0.0"
+    CURRENT_PROJECT_VERSION: "21"
     PRODUCT_BUNDLE_IDENTIFIER: co.gitwork.foundry
     # Leave the team blank for unsigned/ad-hoc local builds. Set DEVELOPMENT_TEAM
     # (and a Developer ID identity) in CI / a local override to produce a signed build.
@@ -43,8 +43,6 @@ targets:
     type: application
     platform: macOS
     deploymentTarget: "26.0"
-    entitlements:
-      path: Foundry/Resources/Foundry.entitlements
     sources:
       - path: Foundry
         excludes:
@@ -69,7 +67,11 @@ targets:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
           ENABLE_HARDENED_RUNTIME: "NO"
+          # Unsigned local builds can't carry the App Group (Xcode wants a provisioning
+          # profile); Release, signed with Developer ID, does.
+          CODE_SIGN_ENTITLEMENTS: ""
         Release:
+          CODE_SIGN_ENTITLEMENTS: Foundry/Resources/Foundry.entitlements
           SWIFT_OPTIMIZATION_LEVEL: "-Owholemodule"
           SWIFT_COMPILATION_MODE: wholemodule
           # Hardened runtime is required for notarization.
@@ -79,19 +81,21 @@ targets:
     type: app-extension
     platform: macOS
     deploymentTarget: "26.0"
-    entitlements:
-      path: FoundryWidgets/FoundryWidgets.entitlements
     sources:
       - path: FoundryWidgets
         excludes:
           - "Info.plist"
           - "FoundryWidgets.entitlements"
-      # Snapshot model + App Group store shared with the main app (compiled into both).
+          - "FoundryWidgets.debug.entitlements"
+      # Snapshot model, App Group store and the widget view, shared with the main app.
       - path: Foundry/Shared
+      # For the accent colour (Foundry Blue, lighter in dark mode).
+      - path: Foundry/Resources/Assets.xcassets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: co.gitwork.foundry.widgets
         PRODUCT_NAME: FoundryWidgets
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
         INFOPLIST_FILE: FoundryWidgets/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         SKIP_INSTALL: YES
@@ -102,7 +106,9 @@ targets:
       configs:
         Debug:
           ENABLE_HARDENED_RUNTIME: "NO"
+          CODE_SIGN_ENTITLEMENTS: FoundryWidgets/FoundryWidgets.debug.entitlements
         Release:
+          CODE_SIGN_ENTITLEMENTS: FoundryWidgets/FoundryWidgets.entitlements
           SWIFT_OPTIMIZATION_LEVEL: "-Owholemodule"
           SWIFT_COMPILATION_MODE: wholemodule
           ENABLE_HARDENED_RUNTIME: "YES"

@@ -41,6 +41,6 @@ final class UpdateController {
 
     var lastUpdateCheckDescription: String {
         guard let date = controller.updater.lastUpdateCheckDate else { return "Never" }
-        return Formatters.medium(date)
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }

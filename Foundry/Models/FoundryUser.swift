@@ -58,8 +58,3 @@ extension FoundryUser {
     }
 }
 
-/// `/api/auth/mobile-callback` response shape (kept for parity / future native sign-in paths).
-struct MobileAuthResponse: Codable, Sendable {
-    let token: String
-    let user: FoundryUser
-}
