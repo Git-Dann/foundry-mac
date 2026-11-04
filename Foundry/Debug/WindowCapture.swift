@@ -32,20 +32,24 @@ enum WindowCapture {
                     w.setFrame(NSRect(x: 80, y: 80, width: 1180, height: 720), display: true)
                     try? await Task.sleep(for: .seconds(1))
                     save(w, to: dir.appending(path: "window-\(name).png"))
-                    model.selection = .suggestions
-                    model.selectedCommitmentId = model.store.items.first { $0.state == .suggested }?.id
+                    model.selection = .today
+                    model.selectedCommitmentId = model.store.items.first { $0.isBoardTask && $0.state == .open }?.id
                     try? await Task.sleep(for: .seconds(1))
                     save(w, to: dir.appending(path: "window-suggestions-\(name).png"))
                     model.selection = .calendar
                     w.setFrame(NSRect(x: 80, y: 80, width: 1440, height: 860), display: true)
                     try? await Task.sleep(for: .seconds(1.5))
                     save(w, to: dir.appending(path: "calendar-\(name).png"))
+                    model.selection = .foundry
+                    w.setFrame(NSRect(x: 80, y: 80, width: 1180, height: 720), display: true)
+                    try? await Task.sleep(for: .seconds(4))
+                    save(w, to: dir.appending(path: "foundry-\(name).png"))
                     model.selection = .today
                     w.setFrame(NSRect(x: 80, y: 80, width: 1180, height: 720), display: true)
                 }
                 // The real panel and widget views, in on-screen windows with the system's popover
                 // material, so vibrancy and dark mode render as they do from the menu bar.
-                await hosted(MenuBarPanel().environment(model), width: 360, height: nil, to: dir.appending(path: "menubar-\(name).png"))
+                await hosted(MenuBarPanel().environment(model), width: 400, height: nil, to: dir.appending(path: "menubar-\(name).png"))
                 let snap = WidgetPublisher.snapshot(model.store.items, signedIn: true)
                 for (fam, label, size) in [(WidgetFamily.systemSmall, "small", CGSize(width: 170, height: 170)), (.systemMedium, "medium", CGSize(width: 364, height: 170)), (.systemLarge, "large", CGSize(width: 364, height: 382))] {
                     await hosted(TodayWidgetView(snapshot: snap, date: Date(), family: fam).padding(16).tint(Color("AccentColor")),

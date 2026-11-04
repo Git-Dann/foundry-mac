@@ -4,14 +4,14 @@ import Foundation
 /// "Add commitment" for Spotlight, Shortcuts and Siri. Adds to the list like quick add does;
 /// it never sends, replies or books anything.
 struct AddCommitmentIntent: AppIntent {
-    static let title: LocalizedStringResource = "Add Commitment"
-    static let description = IntentDescription("Adds a promise to your Foundry commitments.")
+    static let title: LocalizedStringResource = "Add To-do"
+    static let description = IntentDescription("Adds a to-do in Foundry.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Commitment", requestValueDialog: "What did you promise?")
+    @Parameter(title: "To-do", requestValueDialog: "What do you need to do?")
     var title: String
 
-    @Parameter(title: "Due", description: "Optional. Words like “fri” at the end of the commitment also work.")
+    @Parameter(title: "Due", description: "Optional. Words like “fri” at the end of the to-do also work.")
     var due: Date?
 
     @Parameter(title: "For", description: "Who it's for, if anyone.")
@@ -46,8 +46,8 @@ struct AddCommitmentIntent: AppIntent {
 }
 
 struct OpenCommitmentsIntent: AppIntent {
-    static let title: LocalizedStringResource = "Show Commitments"
-    static let description = IntentDescription("Opens your commitments in Foundry.")
+    static let title: LocalizedStringResource = "Show To-dos"
+    static let description = IntentDescription("Opens your to-dos in Foundry.")
     static let openAppWhenRun = true
 
     @MainActor
@@ -63,7 +63,7 @@ enum CommitmentIntentError: Error, CustomLocalizedStringResourceConvertible {
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .signedOut: "Open Foundry and sign in first."
-        case .empty: "The commitment needs a few words."
+        case .empty: "The to-do needs a few words."
         }
     }
 }
@@ -72,14 +72,14 @@ struct FoundryShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: AddCommitmentIntent(),
-            phrases: ["Add a commitment in \(.applicationName)", "Add to my \(.applicationName) commitments"],
-            shortTitle: "Add Commitment",
+            phrases: ["Add a to-do in \(.applicationName)", "Add to my \(.applicationName) to-dos"],
+            shortTitle: "Add To-do",
             systemImageName: "plus.circle"
         )
         AppShortcut(
             intent: OpenCommitmentsIntent(),
-            phrases: ["Show my \(.applicationName) commitments"],
-            shortTitle: "Show Commitments",
+            phrases: ["Show my \(.applicationName) to-dos"],
+            shortTitle: "Show To-dos",
             systemImageName: "checklist"
         )
     }

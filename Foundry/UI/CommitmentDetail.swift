@@ -24,6 +24,14 @@ struct CommitmentDetail: View {
                     header(c)
                     if c.source != .manual { evidence(c) }
                     details(c)
+                    if !c.isBoardTask && c.state != .suggested { PlanningFields(id: id) }
+                    if !c.isBoardTask {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Notes").font(.headline)
+                            NotesEditor(markdown: $notes, onCommit: save)
+                                .frame(minHeight: 180)
+                        }
+                    }
                     actions(c)
                 }
                 .padding(28)
@@ -33,7 +41,7 @@ struct CommitmentDetail: View {
             .onAppear { load(c) }
             .onChange(of: focus) { old, _ in if old != nil { save() } }
             .onDisappear { save() }
-            .confirmationDialog("Delete this commitment?", isPresented: $confirmDelete) {
+            .confirmationDialog("Delete this to-do?", isPresented: $confirmDelete) {
                 Button("Delete", role: .destructive) {
                     model.store.delete(id)
                     model.selectedCommitmentId = nil
@@ -56,18 +64,18 @@ struct CommitmentDetail: View {
                     Label("Not sent yet", systemImage: "icloud.and.arrow.up").font(.caption).foregroundStyle(.secondary)
                 }
             }
-            TextField("Commitment", text: $title, axis: .vertical)
+            TextField("To-do", text: $title, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.title2.weight(.semibold))
                 .focused($focus, equals: .title)
                 .onSubmit { save() }
-                .disabled(c.state == .dismissed)
+                .disabled(c.state == .dismissed || c.isBoardTask)
         }
     }
 
     private func evidence(_ c: Commitment) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Where this came from").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Text(c.isBoardTask ? "On the Foundry board" : "Where this came from").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             if let quote = c.quote, !quote.isEmpty {
                 QuoteView(quote: quote)
             }
@@ -78,20 +86,20 @@ struct CommitmentDetail: View {
                 EvidenceLabel(commitment: c).font(.callout)
                 Spacer()
                 if let link = c.evidenceLink {
-                    Button("Open \(c.source.label)") { NSWorkspace.shared.open(link) }
+                    Button(c.isBoardTask ? "Open on Board" : "Open \(c.source.label)") { NSWorkspace.shared.open(link) }
                         .controlSize(.small)
                 }
             }
         }
         .padding(14)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .background(.fill.quinary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func details(_ c: Commitment) -> some View {
         Form {
-            LabeledContent("Due") {
+            LabeledContent("Deadline") {
                 HStack {
-                    Toggle("Due date", isOn: $hasDue).labelsHidden()
+                    Toggle("Deadline", isOn: $hasDue).labelsHidden().toggleStyle(.switch).controlSize(.small)
                         .onChange(of: hasDue) { _, on in
                             guard loaded else { return }
                             if on, c.dueAt == nil {
@@ -120,12 +128,11 @@ struct CommitmentDetail: View {
                     }
                 }
             }
-            TextField("For", text: $counterpart, prompt: Text("Who it's for"))
-                .focused($focus, equals: .counterpart)
-                .onSubmit { save() }
-            TextField("Notes", text: $notes, prompt: Text("Anything to remember"), axis: .vertical)
-                .lineLimit(3...10)
-                .focused($focus, equals: .notes)
+            if !c.isBoardTask {
+                TextField("For", text: $counterpart, prompt: Text("Who it's for"))
+                    .focused($focus, equals: .counterpart)
+                    .onSubmit { save() }
+            }
         }
         .formStyle(.columns)
         .disabled(c.state == .dismissed)
@@ -135,21 +142,30 @@ struct CommitmentDetail: View {
         HStack(spacing: 10) {
             switch c.state {
             case .suggested:
-                Button("Add to my commitments") { model.store.accept(id) }
-                    .buttonStyle(.borderedProminent)
-                Button("Not mine") { model.store.dismiss(id) }
+                Button("Add to my to-dos") { model.store.accept(id) }
+                    .buttonStyle(.glassProminent)
+                Button("Not mine") { model.store.dismiss(id) }.buttonStyle(.glass)
             case .open:
                 Button("Mark done") { model.complete(id) }
-                    .buttonStyle(.borderedProminent)
-                Menu("Snooze") {
-                    ForEach(SnoozeOption.allCases) { o in
-                        Button(o.title) { model.store.snooze(id, until: o.until(from: Date())) }
-                    }
+                    .buttonStyle(.glassProminent)
+                Button("Focus", systemImage: "timer") {
+                    FocusSession.shared.start(todoId: id, todoTitle: c.title)
+                    model.selection = .focus
                 }
-                .fixedSize()
-                Button("Dismiss") { model.store.dismiss(id) }
+                .buttonStyle(.glass)
+                if !c.isBoardTask {
+                    Menu("Snooze") {
+                        ForEach(SnoozeOption.allCases) { o in
+                            Button(o.title) { model.store.snooze(id, until: o.until(from: Date())) }
+                        }
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.glass)
+                    .fixedSize()
+                    Button("Dismiss") { model.store.dismiss(id) }.buttonStyle(.glass)
+                }
             case .done, .dismissed:
-                Button("Reopen") { model.store.reopen(id) }
+                Button("Reopen") { model.store.reopen(id) }.buttonStyle(.glass)
             }
             Spacer()
             if c.source == .manual {
@@ -172,7 +188,7 @@ struct CommitmentDetail: View {
     }
 
     private func save() {
-        guard loaded, let c = model.store.commitment(id: id) else { return }
+        guard loaded, let c = model.store.commitment(id: id), !c.isBoardTask else { return }
         var patch = CommitmentPatch()
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !t.isEmpty, t != c.title { patch.title = .set(String(t.prefix(200))) }

@@ -48,6 +48,15 @@ enum NotificationPlan {
         var plan: [PlannedNotification] = []
         let open = items.filter { $0.state == .open }
 
+        // Reminders the person set at a time: always delivered, whatever the digest settings.
+        plan += open.compactMap { c -> PlannedNotification? in
+            guard let at = c.remindAt, at > now else { return nil }
+            return PlannedNotification(
+                id: idPrefix + "remind." + c.id, kind: .overdue, date: at,
+                title: "Reminder", body: c.title, commitmentId: c.id
+            )
+        }.sorted { $0.date < $1.date }.prefix(maxOverdueNudges)
+
         if prefs.overdueEnabled {
             let nudges = open.compactMap { c -> PlannedNotification? in
                 guard let due = c.dueAt else { return nil }
@@ -84,7 +93,7 @@ enum NotificationPlan {
                 guard let body = digestBody(due: dueThatDay, overdue: lateBy, review: review) else { continue }
                 plan.append(PlannedNotification(
                     id: idPrefix + "digest." + String(Int(at.timeIntervalSince1970)), kind: .digest, date: at,
-                    title: "Your commitments today", body: body, commitmentId: nil
+                    title: "Your to-dos today", body: body, commitmentId: nil
                 ))
                 if plan.filter({ $0.kind == .digest }).count >= digestDays { break }
             }

@@ -59,60 +59,31 @@ struct CommitmentRow: View {
             }
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(commitment.title)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Display.lines(for: commitment).title)
                     .lineLimit(compact ? 2 : 3)
                     .strikethrough(commitment.state == .done, color: .secondary)
                     .foregroundStyle(commitment.state == .done ? .secondary : .primary)
-                meta
+                HStack(spacing: 6) {
+                    RowMeta(commitment: commitment, subtitle: Display.lines(for: commitment).subtitle)
+                    if commitment.isLocalOnly || model.store.outbox.contains(where: { $0.targetId == commitment.id }) {
+                        Image(systemName: "icloud.and.arrow.up")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .help("Waiting to be sent to Foundry")
+                    }
+                }
             }
             Spacer(minLength: 4)
-            if hovering && commitment.state == .open {
+            if hovering && commitment.state == .open && !commitment.isBoardTask {
                 SnoozeMenu(id: commitment.id)
                     .transition(.opacity)
             }
         }
-        .padding(.vertical, compact ? 3 : 4)
+        .padding(.vertical, compact ? 6 : 8)
         .contentShape(Rectangle())
         .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hovering = h } }
         .contextMenu { CommitmentContextMenu(commitment: commitment) }
-    }
-
-    @ViewBuilder private var meta: some View {
-        let parts = metaParts
-        if !parts.isEmpty {
-            HStack(spacing: 6) {
-                if let due = commitment.dueAt, commitment.state == .open {
-                    Text(DueText.string(due))
-                        .foregroundStyle(isOverdue ? Color.red : Color.secondary)
-                }
-                if let counterpart = commitment.counterpart, !counterpart.isEmpty {
-                    Text(counterpart).foregroundStyle(.secondary)
-                }
-                if commitment.source != .manual {
-                    Label(commitment.source.label, systemImage: commitment.source.symbol)
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(.tertiary)
-                        .help("From \(commitment.source.label.lowercased())")
-                }
-                if commitment.isLocalOnly || model.store.outbox.contains(where: { $0.targetId == commitment.id }) {
-                    Image(systemName: "icloud.and.arrow.up")
-                        .foregroundStyle(.tertiary)
-                        .help("Waiting to be sent to Foundry")
-                }
-            }
-            .font(.caption)
-            .lineLimit(1)
-        }
-    }
-
-    private var metaParts: [String] {
-        var p: [String] = []
-        if commitment.dueAt != nil && commitment.state == .open { p.append("due") }
-        if commitment.counterpart?.isEmpty == false { p.append("who") }
-        if commitment.source != .manual { p.append("src") }
-        if commitment.isLocalOnly || model.store.outbox.contains(where: { $0.targetId == commitment.id }) { p.append("pending") }
-        return p
     }
 }
 
@@ -145,59 +116,71 @@ struct CommitmentContextMenu: View {
         switch commitment.state {
         case .open:
             Button("Mark Done") { model.complete(commitment.id) }
-            Menu("Snooze") {
-                ForEach(SnoozeOption.allCases) { o in
-                    Button(o.title) { model.store.snooze(commitment.id, until: o.until(from: Date())) }
+            if !commitment.isBoardTask {
+                Menu("Snooze") {
+                    ForEach(SnoozeOption.allCases) { o in
+                        Button(o.title) { model.store.snooze(commitment.id, until: o.until(from: Date())) }
+                    }
                 }
             }
             if commitment.isSnoozed(at: Date()) {
                 Button("Wake Up") { model.store.unsnooze(commitment.id) }
             }
         case .suggested:
-            Button("Add to My Commitments") { model.store.accept(commitment.id) }
+            Button("Add to My To-dos") { model.store.accept(commitment.id) }
         case .done, .dismissed:
             Button("Reopen") { model.store.reopen(commitment.id) }
         }
         Divider()
         Button("Open in Window") { model.showInWindow(id: commitment.id) }
         if let link = commitment.evidenceLink {
-            Button("Open \(commitment.source.label)") { NSWorkspace.shared.open(link) }
+            Button(commitment.isBoardTask ? "Open on Board" : "Open \(commitment.source.label)") { NSWorkspace.shared.open(link) }
         }
-        if commitment.state != .dismissed {
+        if commitment.state != .dismissed && !commitment.isBoardTask {
             Divider()
             Button(commitment.state == .suggested ? "Not Mine" : "Dismiss") { model.store.dismiss(commitment.id) }
         }
     }
 }
 
-/// A suggestion: what was found, the words it was read from, and where. Nothing joins the list
-/// until the person says so.
+/// A suggestion, as an ordinary list row: what it is, where it came from, and two system
+/// buttons. Swipe right to add, left for "Not mine". Nothing joins the list until you say so.
 struct SuggestionRow: View {
     @Environment(AppModel.self) private var model
     let commitment: Commitment
     var compact = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(commitment.title)
-                .fontWeight(.medium)
-                .lineLimit(compact ? 2 : 4)
-            if let quote = commitment.quote, !quote.isEmpty {
-                QuoteView(quote: quote, lineLimit: compact ? 3 : nil)
-            }
-            HStack(spacing: 8) {
-                EvidenceLabel(commitment: commitment)
-                Spacer(minLength: 6)
-                Button("Not mine") { model.store.dismiss(commitment.id) }
-                    .buttonStyle(.borderless)
+        let lines = Display.lines(for: commitment)
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: commitment.source.symbol)
+                .foregroundStyle(.secondary)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(lines.title).lineLimit(compact ? 1 : 2)
+                Text(lines.subtitle ?? [commitment.source.label, commitment.evidenceLabel].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("Add") { model.store.accept(commitment.id) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .lineLimit(1)
             }
-            .font(.caption)
+            Spacer(minLength: 6)
+            Button("Not Mine", systemImage: "xmark") { withAnimation { model.store.dismiss(commitment.id) } }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.small)
+                .help("Not mine")
+            Button("Add") { withAnimation { model.store.accept(commitment.id) } }
+                .buttonStyle(.glassProminent)
+                .controlSize(.small)
         }
         .padding(.vertical, 6)
+        .swipeActions(edge: .leading) {
+            Button("Add", systemImage: "plus") { model.store.accept(commitment.id) }.tint(.accentColor)
+        }
+        .swipeActions(edge: .trailing) {
+            Button("Not Mine", systemImage: "xmark") { model.store.dismiss(commitment.id) }
+        }
         .contextMenu { CommitmentContextMenu(commitment: commitment) }
     }
 }
@@ -241,30 +224,71 @@ struct EvidenceLabel: View {
     }
 }
 
+
+/// The header of the suggestions Section: what they are, and clearing them all.
+struct SuggestionsHeader: View {
+    @Environment(AppModel.self) private var model
+    let count: Int
+
+    var body: some View {
+        HStack {
+            Label("Suggested · \(count)", systemImage: "sparkles")
+            Spacer()
+            if count > 1 {
+                Button("Not Mine, All") {
+                    withAnimation { for c in CommitmentGrouping.suggestions(model.store.items) { model.store.dismiss(c.id) } }
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+            }
+        }
+    }
+}
+
+/// One quiet line when a source couldn't be read. It doesn't push your to-dos down the page.
+struct SourceFootnote: View {
+    @Environment(\.openSettings) private var openSettings
+    let text: String
+
+    var body: some View {
+        Button { openSettings() } label: {
+            Label(text, systemImage: "exclamationmark.circle")
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .help(text + " Click to see your sources.")
+    }
+}
+
 /// The quick-add line used in the menu bar and the window.
 struct QuickAddField: View {
     @Environment(AppModel.self) private var model
-    var prompt = "I promised to…"
+    var prompt = "Add a to-do"
     var focusToken: Int = 0
+    /// Where it was typed: a list, Today, Someday… (words in the line still win).
+    var defaults: NewCommitment? = nil
     @State private var text = ""
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Image(systemName: "plus").foregroundStyle(.secondary)
+                Image(systemName: "plus")
+                    .foregroundStyle(focused ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                 TextField(prompt, text: $text)
                     .textFieldStyle(.plain)
                     .focused($focused)
-                    .onSubmit {
-                        if model.store.add(text: text) != nil { text = "" }
-                    }
+                    .onSubmit { if model.store.add(text: text, defaults: defaults) != nil { text = "" } }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .glassEffect(.regular.interactive(), in: .capsule)
             if focused && !text.isEmpty {
-                DueHint(text: text).font(.caption).padding(.leading, 10)
+                DueHint(text: text).font(.caption).padding(.leading, 4)
             }
         }
         .onChange(of: focusToken) { focused = true }

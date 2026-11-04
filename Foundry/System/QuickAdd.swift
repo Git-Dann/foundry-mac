@@ -131,14 +131,14 @@ struct DueHint: View {
     var signedIn = true
 
     var body: some View {
-        let parsed = DueDateParser.parse(text)
+        let parsed = QuickAddParser.parse(text)
         Group {
             if !signedIn {
-                Text("Sign in to Foundry to add commitments.")
-            } else if let due = parsed.dueAt, let words = parsed.matched {
-                Text("Due \(due.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))  ·  from “\(words)”")
+                Text("Sign in to Foundry to add to-dos.")
+            } else if !parsed.chips.isEmpty {
+                Text(parsed.chips.joined(separator: "  ·  "))
             } else {
-                Text("Return to add. Add a day at the end, like “fri” or “tomorrow”.")
+                Text("Return to add. Try “fri 3pm”, “#tag”, “!!”, “~List”, “every week”.")
             }
         }
         .font(.callout)

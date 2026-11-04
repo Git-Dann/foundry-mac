@@ -33,7 +33,7 @@ struct FoundryApp: App {
     @NSApplicationDelegateAdaptor(FoundryAppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Window("Commitments", id: "main") {
+        Window("Foundry", id: "main") {
             MainWindow().environment(model)
         }
         .defaultSize(width: 1080, height: 700)
@@ -75,8 +75,8 @@ struct CommitmentCommands: Commands {
             Button("Check for Updates…", action: checkForUpdates)
         }
         CommandGroup(replacing: .newItem) {
-            Button("New Commitment") {
-                if model.selection != .today && model.selection != .upcoming { model.selection = .today }
+            Button("New To-do") {
+                if [.calendar, .foundry, .done].contains(model.selection) { model.selection = .inbox }
                 model.openMainWindow()
                 model.requestQuickAddFocus()
             }
@@ -86,9 +86,9 @@ struct CommitmentCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(!model.auth.isSignedIn)
         }
-        CommandMenu("Commitment") {
+        CommandMenu("To-do") {
             let selected = model.selectedCommitmentId.flatMap { model.store.commitment(id: $0) }
-            Button(selected?.state == .suggested ? "Add to My Commitments" : "Mark Done") {
+            Button(selected?.state == .suggested ? "Add to My To-dos" : "Mark Done") {
                 guard let c = selected else { return }
                 if c.state == .suggested { model.store.accept(c.id) } else { model.complete(c.id) }
             }
@@ -119,14 +119,16 @@ struct CommitmentCommands: Commands {
                 .disabled(model.lastCompleted == nil)
         }
         CommandGroup(after: .sidebar) {
-            Button("Search") { model.openMainWindow(); model.requestSearchFocus() }
+            Button("Command Palette…") { model.openMainWindow(); model.paletteShown = true }
                 .keyboardShortcut("k")
+            Button("Search") { model.openMainWindow(); model.requestSearchFocus() }
+                .keyboardShortcut("f")
             Button("Refresh") { Task { await model.store.refresh() } }
                 .keyboardShortcut("r")
             Button("Check Sources Now") { Task { await model.store.checkSources() } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
             Divider()
-            ForEach(Array(SidebarItem.allCases.enumerated()), id: \.element) { index, item in
+            ForEach(Array(SidebarItem.navigable.prefix(9).enumerated()), id: \.element) { index, item in
                 Button(item.title) { model.selection = item; model.openMainWindow() }
                     .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
             }

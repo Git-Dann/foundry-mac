@@ -22,6 +22,7 @@ struct CommitmentCacheFile: Codable, Sendable {
     var settings: CommitmentSettings
     var loadedAt: Date?
     var outbox: [PendingOperation]
+    var lists: [TodoList]? = nil
 }
 
 /// Reads and writes the cache file. One file per signed-in person; removed on sign-out.
@@ -70,6 +71,9 @@ struct CommitmentCache: Sendable {
 @Observable
 final class CommitmentStore {
     private(set) var items: [Commitment] = []
+    private(set) var lists: [TodoList] = []
+    /// False until the server says it has lists, tags, repeats… (see `CommitmentsResponse`).
+    private(set) var supportsPlanning = true
     private(set) var settings: CommitmentSettings = .empty
     private(set) var loadedAt: Date?
     private(set) var isRefreshing = false
@@ -82,10 +86,17 @@ final class CommitmentStore {
     private(set) var outbox: [PendingOperation] = []
     var pendingCount: Int { outbox.count }
 
+    /// Board tasks assigned to you, as last read. Kept apart so a failed board read leaves the
+    /// last good list in place rather than emptying it.
+    @ObservationIgnored private var boardItems: [Commitment] = []
+    /// Set when the board couldn't be read; your own to-dos still show.
+    private(set) var boardProblem: String?
+
     @ObservationIgnored private var service: CommitmentsService
     @ObservationIgnored private let cache: CommitmentCache
     @ObservationIgnored private var userId: String?
     @ObservationIgnored private var flushing = false
+    @ObservationIgnored private var needsReload = false
     @ObservationIgnored private var lastAutoCheck: Date?
     @ObservationIgnored var onChange: (([Commitment]) -> Void)?
     @ObservationIgnored var onUnauthorized: (() -> Void)?
@@ -108,6 +119,7 @@ final class CommitmentStore {
             settings = file.settings
             loadedAt = file.loadedAt
             outbox = file.outbox
+            lists = file.lists ?? []
         } else {
             items = []; settings = .empty; loadedAt = nil; outbox = []
         }
@@ -164,10 +176,37 @@ final class CommitmentStore {
         let response = try await service.list()
         isOffline = false
         settings = response.settings
+        lists = response.lists.filter { !$0.archived }.sorted { $0.orderKey < $1.orderKey }
+        supportsPlanning = response.supportsPlanning
         loadedAt = now()
-        items = Self.reconcile(server: response.commitments, outbox: outbox, now: now())
+        await loadBoard()
+        if settings.gmailEnabled || settings.slackEnabled {
+            // The AI read of email and Slack is retired in this app (it cost credit for things
+            // Foundry already collects). Switch it off so the server stops trying too.
+            var off = settings
+            off.gmailEnabled = false
+            off.slackEnabled = false
+            if let saved = try? await service.updateSettings(off) { settings = saved } else { settings = off }
+        }
+        items = Self.reconcile(server: response.commitments + boardItems, outbox: outbox, now: now())
         if lastError?.hasPrefix("Couldn't reach") == true { lastError = nil }
         persistAndNotify()
+    }
+
+    private func loadBoard() async {
+        guard let userId, !userId.isEmpty else { return }
+        do {
+            let tasks = try await service.boardTasks(assigneeId: userId)
+            let at = now()
+            boardItems = tasks.filter { BoardTasks.isRelevant($0, for: userId, now: at) }
+                .map { BoardTasks.commitment($0, webPath: BoardTasks.path) }
+            boardProblem = nil
+        } catch let error as AppError where error.isUnauthorized {
+            onUnauthorized?()
+        } catch {
+            if boardItems.isEmpty { boardItems = items.filter(\.isBoardTask) }
+            boardProblem = "Your Foundry board tasks couldn't be read just now."
+        }
     }
 
     /// When the last read is over this old, opening or refreshing the app reads the sources.
@@ -204,6 +243,61 @@ final class CommitmentStore {
     }
 
     func commitment(id: String) -> Commitment? { items.first { $0.id == id } }
+    func list(id: String?) -> TodoList? { id.flatMap { id in lists.first { $0.id == id } } }
+
+    // MARK: Lists
+
+    /// Lists are created and changed online (they're rare edits); a failure is said, not queued.
+    @discardableResult
+    func createList(name: String, color: String?, symbol: String?, area: String? = nil) async -> TodoList? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        do {
+            let list = try await service.createList(name: String(trimmed.prefix(80)), color: color, symbol: symbol, area: area)
+            lists.append(list)
+            persistAndNotify()
+            return list
+        } catch {
+            handle(error, context: "Couldn't create the list")
+            return nil
+        }
+    }
+
+    func updateList(_ list: TodoList) async {
+        guard let i = lists.firstIndex(where: { $0.id == list.id }) else { return }
+        let previous = lists[i]
+        lists[i] = list
+        persistAndNotify()
+        do { lists[i] = try await service.updateList(list) } catch {
+            lists[i] = previous
+            handle(error, context: "Couldn't save the list")
+        }
+        persistAndNotify()
+    }
+
+    func deleteList(_ id: String) async {
+        do {
+            try await service.deleteList(id: id)
+            lists.removeAll { $0.id == id }
+            for i in items.indices where items[i].listId == id { items[i].listId = nil }
+            persistAndNotify()
+        } catch {
+            handle(error, context: "Couldn't delete the list")
+        }
+    }
+
+    /// Drag to reorder: `ids` in their new order. Applied here at once, sent in one request.
+    func reorder(_ ids: [String]) {
+        let own = ids.filter { !$0.hasPrefix(Commitment.boardPrefix) && !$0.hasPrefix(Commitment.localPrefix) }
+        for (n, id) in ids.enumerated() {
+            if let i = items.firstIndex(where: { $0.id == id }) { items[i].orderKey = Double(n) }
+        }
+        persistAndNotify()
+        guard !own.isEmpty, supportsPlanning else { return }
+        Task {
+            do { try await service.reorder(ids: own) } catch { handle(error, context: "Couldn't save the order") }
+        }
+    }
 
     // MARK: Editing
 
@@ -216,13 +310,26 @@ final class CommitmentStore {
         return item
     }
 
-    /// Quick add: "Send the deck to Acme fri" → due Friday.
+    /// Quick add with the full grammar ("Call Valu #sales !! ~Clients every week fri 3pm").
+    /// `defaults` carries where it was typed: adding inside a list puts it in that list, inside
+    /// Today plans it for today, and so on. Words in the line win over the defaults.
     @discardableResult
-    func add(text: String) -> Commitment? {
-        let parsed = DueDateParser.parse(text, now: now())
-        let title = parsed.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    func add(text: String, defaults: NewCommitment? = nil) -> Commitment? {
+        let p = QuickAddParser.parse(text, now: now())
+        let title = p.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
-        return add(NewCommitment(title: String(title.prefix(200)), dueAt: parsed.dueAt))
+        var new = defaults ?? NewCommitment(title: "")
+        new.title = String(title.prefix(200))
+        if let d = p.dueAt { new.dueAt = d }
+        if !p.tags.isEmpty { new.tags = Array(Set(new.tags + p.tags)).sorted() }
+        if p.priority > 0 { new.priority = p.priority }
+        if let name = p.listName, let l = lists.first(where: { $0.name.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }) {
+            new.listId = l.id
+        }
+        if let r = p.recurrence { new.recurrence = r.rule }
+        if p.evening { new.evening = true; new.startAt = p.startAt }
+        if p.someday { new.someday = true; new.startAt = nil; new.evening = false }
+        return add(new)
     }
 
     func update(_ id: String, _ patch: CommitmentPatch) {
@@ -235,7 +342,11 @@ final class CommitmentStore {
     func reopen(_ id: String) { update(id, CommitmentPatch(state: .open, snoozedUntil: .clear)) }
     func accept(_ id: String) { update(id, CommitmentPatch(state: .open)) }
     func dismiss(_ id: String) { update(id, CommitmentPatch(state: .dismissed)) }
-    func snooze(_ id: String, until: Date) { update(id, CommitmentPatch(snoozedUntil: .set(until))) }
+    func snooze(_ id: String, until: Date) {
+        // A board task's date belongs to the board; snoozing it would only hide it here.
+        guard commitment(id: id)?.isBoardTask != true else { return }
+        update(id, CommitmentPatch(snoozedUntil: .set(until)))
+    }
     func unsnooze(_ id: String) { update(id, CommitmentPatch(snoozedUntil: .clear)) }
 
     /// Only ones the person typed in can be deleted; suggestions are dismissed so they aren't
@@ -327,15 +438,40 @@ final class CommitmentStore {
         guard !flushing, userId != nil else { return }
         flushing = true
         defer { flushing = false }
+        needsReload = false
+        defer { if needsReload { needsReload = false; Task { try? await load() } } }
         while let op = outbox.first {
             do {
                 switch op {
                 case .create(let localId, let new):
-                    let saved = try await service.create(new)
+                    let saved = try await service.create(supportsPlanning ? new : new.withoutPlanning)
                     replaceLocalId(localId, with: saved)
                 case .update(let id, let patch):
                     guard !id.hasPrefix(Commitment.localPrefix) else { break }
-                    let saved = try await service.update(id: id, patch)
+                    let saved: Commitment
+                    if let taskId = id.hasPrefix(Commitment.boardPrefix) ? String(id.dropFirst(Commitment.boardPrefix.count)) : nil {
+                        let current = items.first { $0.id == id }
+                        let status = patch.state.flatMap { BoardTasks.status(for: $0, previous: current?.boardStatus) }
+                        let due: CommitmentPatch.Field<String>? = patch.dueAt.map {
+                            if case .set(let d) = $0 { .set(BoardTasks.dueDate(d)) } else { .clear }
+                        }
+                        guard status != nil || due != nil else { break }
+                        var task = BoardTasks.commitment(
+                            try await service.updateBoardTask(id: taskId, status: status, dueDate: due),
+                            webPath: BoardTasks.path
+                        )
+                        // Reopening must remember where it came from, not "DONE".
+                        if task.boardStatus == "DONE", let prev = current?.boardStatus, prev != "DONE" { task.boardStatus = prev }
+                        saved = task
+                        if let b = boardItems.firstIndex(where: { $0.id == id }) { boardItems[b] = saved }
+                    } else {
+                        let repeats = patch.state == .done && items.first(where: { $0.id == id })?.recurrence != nil
+                        let send = supportsPlanning ? patch : patch.withoutPlanning
+                        guard !send.isEmpty else { break }
+                        saved = try await service.update(id: id, send)
+                        // Ticking a repeating to-do makes the server create the next one; fetch it.
+                        if repeats { needsReload = true }
+                    }
                     // Keep later local edits if any were made while this was in flight.
                     if !outbox.dropFirst().contains(where: { $0.targetId == id }),
                        let i = items.firstIndex(where: { $0.id == id }) {
@@ -379,7 +515,7 @@ final class CommitmentStore {
         if let appError = error as? AppError {
             if appError.isUnauthorized { onUnauthorized?(); return }
             if case .http(404, _) = appError {
-                lastError = "Commitments aren't on this Foundry server yet."
+                lastError = "To-dos aren't on this Foundry server yet."
                 return
             }
             if case .network = appError {
@@ -393,7 +529,7 @@ final class CommitmentStore {
 
     private func persistAndNotify() {
         if let userId {
-            cache.save(CommitmentCacheFile(userId: userId, items: items, settings: settings, loadedAt: loadedAt, outbox: outbox))
+            cache.save(CommitmentCacheFile(userId: userId, items: items, settings: settings, loadedAt: loadedAt, outbox: outbox, lists: lists))
         }
         notify()
     }
@@ -402,8 +538,9 @@ final class CommitmentStore {
 
     #if DEBUG
     /// Screenshots and previews only.
-    func loadForPreview(_ items: [Commitment], settings: CommitmentSettings = .empty) {
+    func loadForPreview(_ items: [Commitment], settings: CommitmentSettings = .empty, lists: [TodoList] = SampleData.lists) {
         self.items = items
+        self.lists = lists
         self.settings = settings
         self.loadedAt = now()
     }
@@ -415,7 +552,10 @@ extension Commitment {
         Commitment(
             id: id, title: new.title, notes: new.notes, dueAt: new.dueAt, state: .open, source: .manual,
             counterpart: new.counterpart, quote: nil, evidenceLabel: nil, evidenceUrl: nil, evidenceAt: nil,
-            reason: nil, snoozedUntil: nil, doneAt: nil, createdAt: now, updatedAt: now
+            reason: nil, snoozedUntil: nil, doneAt: nil, createdAt: now, updatedAt: now,
+            listId: new.listId, tags: new.tags, priority: new.priority, startAt: new.startAt,
+            evening: new.evening, someday: new.someday, remindAt: new.remindAt, recurrence: new.recurrence,
+            orderKey: -now.timeIntervalSince1970
         )
     }
 }

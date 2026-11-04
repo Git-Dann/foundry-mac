@@ -22,6 +22,29 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
     var doneAt: Date?
     var createdAt: Date
     var updatedAt: Date
+    /// Board tasks only: the task's own status on the board (TODO, DOING, IN_REVIEW…), kept so
+    /// reopening a ticked task puts it back where it was. Never sent by the commitments API.
+    var boardStatus: String?
+
+    // Planning fields (docs-by-gitwork: lists, tags, priority, checklists, repeating to-dos).
+    // Older servers don't send them, so each has a default and decoding never requires them.
+    var listId: String? = nil
+    var tags: [String] = []
+    var priority: Int = 0
+    /// The day you plan to do it ("When"), as opposed to `dueAt`, the deadline.
+    var startAt: Date? = nil
+    var evening: Bool = false
+    var someday: Bool = false
+    var remindAt: Date? = nil
+    var recurrence: String? = nil
+    var checklist: [ChecklistItem] = []
+    var orderKey: Double = 0
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, notes, dueAt, state, source, counterpart, quote, evidenceLabel, evidenceUrl, evidenceAt, reason,
+             snoozedUntil, doneAt, createdAt, updatedAt, boardStatus,
+             listId, tags, priority, startAt, evening, someday, remindAt, recurrence, checklist, orderKey
+    }
 
     enum State: String, Codable, Sendable, CaseIterable {
         case suggested, open, done, dismissed
@@ -34,7 +57,7 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
     }
 
     enum Source: String, Codable, Sendable {
-        case manual, gmail, slack, meeting, calendar, unknown
+        case manual, gmail, slack, meeting, calendar, board, unknown
 
         init(from decoder: Decoder) throws {
             let raw = try decoder.singleValueContainer().decode(String.self)
@@ -48,6 +71,7 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
             case .slack: "Slack"
             case .meeting: "Meeting notes"
             case .calendar: "Calendar"
+            case .board: "Board"
             case .unknown: "Foundry"
             }
         }
@@ -59,6 +83,7 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
             case .slack: "number"
             case .meeting: "text.bubble"
             case .calendar: "calendar"
+            case .board: "rectangle.split.3x1"
             case .unknown: "circle.dotted"
             }
         }
@@ -66,6 +91,11 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
 
     var isLocalOnly: Bool { id.hasPrefix(Commitment.localPrefix) }
     static let localPrefix = "local-"
+
+    /// A Foundry board task assigned to you, shown in the same lists as your own to-dos.
+    var isBoardTask: Bool { id.hasPrefix(Commitment.boardPrefix) }
+    static let boardPrefix = "task:"
+    var boardTaskId: String? { isBoardTask ? String(id.dropFirst(Commitment.boardPrefix.count)) : nil }
 
     /// The Foundry host relative links resolve against (meeting notes link to `/app/portal/…`).
     /// Set from `AppEnvironment` at launch.
@@ -136,6 +166,10 @@ struct CommitmentSettings: Codable, Hashable, Sendable {
         }
 
         var symbol: String { Commitment.Source(rawValue: rawValue)?.symbol ?? "circle" }
+
+        /// What this app reads. Email and Slack are NOT read with AI here: what Foundry already
+        /// collects from Slack shows in the Foundry feed instead, with no AI and no credit used.
+        static let offered: [Toggle] = [.meeting, .calendar]
     }
 
     func isOn(_ toggle: Toggle) -> Bool {
@@ -166,6 +200,31 @@ struct CommitmentSettings: Codable, Hashable, Sendable {
 struct CommitmentsResponse: Codable, Sendable {
     var commitments: [Commitment]
     var settings: CommitmentSettings
+    var lists: [TodoList] = []
+    /// Whether this server has lists, tags, priority, repeats… (it sends `lists` when it does).
+    /// An older server refuses those fields outright, so the app must not send them.
+    var supportsPlanning = true
+
+    init(commitments: [Commitment], settings: CommitmentSettings, lists: [TodoList] = [], supportsPlanning: Bool = true) {
+        self.commitments = commitments; self.settings = settings; self.lists = lists; self.supportsPlanning = supportsPlanning
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        commitments = try c.decode([Commitment].self, forKey: .commitments)
+        settings = try c.decode(CommitmentSettings.self, forKey: .settings)
+        lists = try c.decodeIfPresent([TodoList].self, forKey: .lists) ?? []
+        supportsPlanning = c.contains(.lists)
+    }
+
+    enum CodingKeys: String, CodingKey { case commitments, settings, lists }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(commitments, forKey: .commitments)
+        try c.encode(settings, forKey: .settings)
+        try c.encode(lists, forKey: .lists)
+    }
 }
 
 struct CommitmentSyncResult: Codable, Sendable {
@@ -187,9 +246,21 @@ struct CommitmentPatch: Equatable, Sendable, Codable {
     var counterpart: Field<String>?
     var state: Commitment.State?
     var snoozedUntil: Field<Date>?
+    var listId: Field<String>? = nil
+    var tags: [String]? = nil
+    var priority: Int? = nil
+    var startAt: Field<Date>? = nil
+    var evening: Bool? = nil
+    var someday: Bool? = nil
+    var remindAt: Field<Date>? = nil
+    var recurrence: Field<String>? = nil
+    var checklist: [ChecklistItem]? = nil
+    var orderKey: Double? = nil
 
     var isEmpty: Bool {
         title == nil && notes == nil && dueAt == nil && counterpart == nil && state == nil && snoozedUntil == nil
+            && listId == nil && tags == nil && priority == nil && startAt == nil && evening == nil && someday == nil
+            && remindAt == nil && recurrence == nil && checklist == nil && orderKey == nil
     }
 
     /// Later edits win, field by field. Used to fold queued offline edits together.
@@ -200,7 +271,17 @@ struct CommitmentPatch: Equatable, Sendable, Codable {
             dueAt: later.dueAt ?? dueAt,
             counterpart: later.counterpart ?? counterpart,
             state: later.state ?? state,
-            snoozedUntil: later.snoozedUntil ?? snoozedUntil
+            snoozedUntil: later.snoozedUntil ?? snoozedUntil,
+            listId: later.listId ?? listId,
+            tags: later.tags ?? tags,
+            priority: later.priority ?? priority,
+            startAt: later.startAt ?? startAt,
+            evening: later.evening ?? evening,
+            someday: later.someday ?? someday,
+            remindAt: later.remindAt ?? remindAt,
+            recurrence: later.recurrence ?? recurrence,
+            checklist: later.checklist ?? checklist,
+            orderKey: later.orderKey ?? orderKey
         )
     }
 
@@ -211,6 +292,22 @@ struct CommitmentPatch: Equatable, Sendable, Codable {
         if let dueAt { c.dueAt = dueAt.value }
         if let counterpart { c.counterpart = counterpart.value }
         if let snoozedUntil { c.snoozedUntil = snoozedUntil.value }
+        if let listId { c.listId = listId.value }
+        if let tags { c.tags = tags }
+        if let priority { c.priority = priority }
+        if let startAt {
+            c.startAt = startAt.value
+            if c.startAt != nil { c.someday = false }
+        }
+        if let evening { c.evening = evening }
+        if let someday {
+            c.someday = someday
+            if someday { c.startAt = nil; c.evening = false }
+        }
+        if let remindAt { c.remindAt = remindAt.value }
+        if let recurrence { c.recurrence = recurrence.value }
+        if let checklist { c.checklist = checklist }
+        if let orderKey { c.orderKey = orderKey }
         if let state {
             c.state = state
             c.doneAt = state == .done ? (c.doneAt ?? now) : nil
@@ -235,7 +332,30 @@ struct CommitmentPatch: Equatable, Sendable, Codable {
         put("counterpart", counterpart) { $0 }
         put("snoozedUntil", snoozedUntil) { ISO8601DateParser.string(from: $0) }
         if let state { body["state"] = state.rawValue }
+        put("listId", listId) { $0 }
+        if let tags { body["tags"] = tags }
+        if let priority { body["priority"] = priority }
+        put("startAt", startAt) { ISO8601DateParser.string(from: $0) }
+        if let evening { body["evening"] = evening }
+        if let someday { body["someday"] = someday }
+        put("remindAt", remindAt) { ISO8601DateParser.string(from: $0) }
+        put("recurrence", recurrence) { $0 }
+        if let checklist { body["checklist"] = checklist.map { ["id": $0.id, "text": $0.text, "done": $0.done] } }
+        if let orderKey { body["orderKey"] = orderKey }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+}
+
+extension CommitmentPatch {
+    /// The same edit with the planning fields removed, for a server that doesn't have them.
+    var withoutPlanning: CommitmentPatch {
+        CommitmentPatch(title: title, notes: notes, dueAt: dueAt, counterpart: counterpart, state: state, snoozedUntil: snoozedUntil)
+    }
+}
+
+extension NewCommitment {
+    var withoutPlanning: NewCommitment {
+        NewCommitment(title: title, dueAt: dueAt, notes: notes, counterpart: counterpart)
     }
 }
 
@@ -252,12 +372,28 @@ struct NewCommitment: Equatable, Sendable, Codable {
     var dueAt: Date?
     var notes: String?
     var counterpart: String?
+    var listId: String? = nil
+    var tags: [String] = []
+    var priority: Int = 0
+    var startAt: Date? = nil
+    var evening: Bool = false
+    var someday: Bool = false
+    var remindAt: Date? = nil
+    var recurrence: String? = nil
 
     func jsonBody() throws -> Data {
         var body: [String: Any] = ["title": title]
         if let dueAt { body["dueAt"] = ISO8601DateParser.string(from: dueAt) }
         if let notes, !notes.isEmpty { body["notes"] = notes }
         if let counterpart, !counterpart.isEmpty { body["counterpart"] = counterpart }
+        if let listId { body["listId"] = listId }
+        if !tags.isEmpty { body["tags"] = tags }
+        if priority != 0 { body["priority"] = priority }
+        if let startAt { body["startAt"] = ISO8601DateParser.string(from: startAt) }
+        if evening { body["evening"] = true }
+        if someday { body["someday"] = true }
+        if let remindAt { body["remindAt"] = ISO8601DateParser.string(from: remindAt) }
+        if let recurrence { body["recurrence"] = recurrence }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
     }
 }

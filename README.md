@@ -1,11 +1,10 @@
 # Foundry for Mac
 
-Your commitments: the promises you've made, in one calm list.
-
-Foundry reads what you wrote in sent email, Slack, meeting notes and your calendar, and
-**suggests** the things you said you'd do. Nothing joins your list until you add it, and the
-app **never sends, replies or books anything** for you. A good day is one where you barely
-open it.
+A native macOS to-do app that is also your Foundry partner. Your own to-dos sit beside the
+Foundry board tasks assigned to you, with your calendar and your client Slack, in one place.
+Built with SwiftUI on macOS 26/27: system lists, forms, Liquid Glass controls, SwiftData,
+Swift Charts and App Intents. Foundry may suggest the odd follow-up from your meetings;
+nothing is added, sent or booked without you.
 
 | Menu bar | Window | Widget |
 |---|---|---|
@@ -17,38 +16,44 @@ The data and the reading of your sources live in Foundry (Backstage → Commitme
 
 ## What's in it
 
-- **Menu bar.** Opens straight away from the last list it saved. Quick add at the top, then
-  Overdue / Today / Next 7 days / Later / No date, then "N to review" with **Add** and
-  **Not mine** on each suggestion. Tick to complete (with Undo); hover a row to snooze
-  (later today, tomorrow 09:00, next Monday). The menu-bar icon shows how many are due now.
-- **Window.** Today, Upcoming, Suggestions, Done. The detail pane shows the quote a suggestion
-  was read from, where it came from, and a link back to the email, Slack message or meeting.
-- **Quick add anywhere.** ⌃⌥Space opens a small floating field (turn off in Settings). Words at
-  the end of the line become the date: `fri`, `tomorrow`, `next week`, `in 3 days`, `23 nov`.
-- **Spotlight and Shortcuts.** "Add Commitment" and "Show Commitments" App Intents.
-- **Notifications.** One morning digest (09:00 by default; quiet mornings send nothing) and a
-  nudge when something becomes overdue, with Mark done / Tomorrow actions. A new suggestion
-  never notifies you.
-- **Widget.** Today's commitments (small, medium, large). It shows titles only; quotes and
-  notes never leave the app.
-- **Works offline.** The list is cached on disk per person. Edits made offline are applied at
-  once, queued, and sent in order when Foundry is reachable again. Signing out deletes the cache.
-- **Settings.** Account, notifications, the quick-add shortcut, updates; **Sources** mirrors
-  `/settings` (sent email, Slack, meeting notes, calendar) and shows each source's own message
-  when it couldn't be read; **Advanced** sets the API server.
+- **Planning views (Things-style).** Inbox (unsorted), Today with **This Evening**, Upcoming by
+  day, Anytime, Someday, Logbook. Each to-do has a **When** (the day you'll do it) separate from
+  its **Deadline**.
+- **Lists** with colour, icon and area; drag a to-do onto a list in the sidebar. **Tags**
+  (sidebar lists the most used). **Smart lists**: saved filters by list, tags, priority, due and
+  words.
+- **Detail pane.** Priority, repeat (daily, weekdays, weekly, fortnightly, monthly, yearly,
+  every N days/weeks/months), a reminder at a time, a checklist with progress, and **rich
+  notes** (bold, italic, headings, lists, checklists; stored as Markdown).
+- **Quick add grammar.** `Call Valu about the quote #sales !! ~Clients every week fri 3pm`:
+  tags, priority, list, repeat, day and time in one line; `tonight` and `someday` plan it.
+- **Reorder** by dragging; **select several** for batch changes (Today, This Evening, Tomorrow,
+  Someday, move to list, priority, done) from the toolbar or a right-click.
+- **Board** (Kanban by list) and **Priorities** (Eisenhower matrix; drag between quadrants).
+- **Focus timer** (15/25/50 minutes or custom, breaks, a live timer in the menu bar) and a
+  **Focus filter**: in System Settings › Focus, a Focus can make Foundry show only today or
+  only board tasks.
+- **Habits** with streaks, a Mon–Sun check row and a 12-week chart (kept on this Mac).
+- **⌘K command palette** to jump anywhere, open any to-do or run an action.
+- **Foundry.** Board tasks assigned to you appear in your lists with their client; ticking one
+  marks it done on the board. The Foundry view shows your Slack mentions and client channel
+  messages (no AI) with "Make a to-do". Calendar shows your Google Calendar week.
+- **Menu bar.** Today, This Evening, the next days and Inbox; quick add; the focus timer.
+- **Works offline.** Edits are applied at once, queued and sent when Foundry is reachable.
 
 ## Keyboard
 
 | | |
 |---|---|
-| ⌘N | New commitment (focuses quick add in the window) |
+| ⌘K | Command palette |
+| ⌘F | Search |
+| ⌘N | New to-do (quick add in the window) |
 | ⇧⌘N / ⌃⌥Space | Quick add (floating) |
-| ⌘K | Search |
-| Space | Complete, accept or reopen the selected row (when the list has focus) |
-| ⌘⌫ | Dismiss / Not mine (while typing, it keeps its text meaning) |
-| ⌘S | Snooze until tomorrow 09:00 (Commitment → Snooze for the others) |
+| Space | Complete, accept or reopen the selected row |
+| ⌘⌫ | Dismiss (while typing, it keeps its text meaning) |
+| ⌘S | Snooze until tomorrow 09:00; in notes, save |
 | ⌘R / ⇧⌘R | Refresh / check sources now |
-| ⌘1–⌘4 | Today, Upcoming, Suggestions, Done |
+| ⌘1–⌘9 | Inbox, Today, Upcoming, Anytime, Someday, Logbook, Calendar, Board, Priorities |
 
 ## Requirements
 

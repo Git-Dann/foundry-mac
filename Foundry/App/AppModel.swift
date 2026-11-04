@@ -16,12 +16,34 @@ final class AppModel {
     let network: NetworkMonitor
     let notifications: NotificationScheduler
     let calendar: CalendarStore
+    let feed: FoundryFeedStore
 
-    var selection: SidebarItem = .today
-    var selectedCommitmentId: String?
+    var selection: SidebarItem = .today {
+        didSet { if selection != .filtered { filter = nil } }
+    }
+    /// The list, tag or smart list shown when `selection == .filtered`.
+    var filter: TodoFilter?
+    /// Saved filters ("Smart Lists"), kept on this Mac.
+    var smartLists: [TodoFilter] = SmartLists.load() {
+        didSet { SmartLists.save(smartLists) }
+    }
+    /// The window's selection; several rows can be selected for batch edits.
+    var selectedIds: Set<String> = []
+    /// The single selected to-do, when exactly one is selected (detail pane, ⌘ commands).
+    var selectedCommitmentId: String? {
+        get { selectedIds.count == 1 ? selectedIds.first : nil }
+        set { selectedIds = newValue.map { [$0] } ?? [] }
+    }
+
+    func show(filter: TodoFilter) {
+        selection = .filtered
+        self.filter = filter
+    }
     /// Bumped to move focus to the main window's quick-add field (⌘N).
     private(set) var focusQuickAddToken = 0
     private(set) var focusSearchToken = 0
+    /// The ⌘K command palette.
+    var paletteShown = false
     /// The last completion, for Undo.
     var lastCompleted: Commitment?
 
@@ -43,6 +65,18 @@ final class AppModel {
             baseURL: { await MainActor.run { environment.baseURL } },
             token: { await MainActor.run { auth.token } }
         )
+        self.feed = FoundryFeedStore(
+            baseURL: { await MainActor.run { environment.baseURL } },
+            token: { await MainActor.run { auth.token } }
+        )
+        // The sign-in token often carries no name; "dan@gitwork.co.uk" still says who "Dan" is.
+        self.feed.myName = { [weak auth] in
+            MainActor.assumeIsolated {
+                guard let user = auth?.currentUser else { return nil }
+                if let name = user.name, !name.isEmpty { return name }
+                return user.email.split(separator: "@").first.map(String.init)
+            }
+        }
 
         Commitment.webBase = environment.baseURL
         store.onChange = { [weak self] items in self?.itemsChanged(items) }
@@ -153,15 +187,18 @@ final class AppModel {
 
     func showInWindow(id: String?) {
         if let id, let c = store.commitment(id: id) {
-            selection = c.state == .suggested ? .suggestions : (c.state == .done ? .done : (sidebarItem(for: c)))
+            selection = c.state == .suggested ? .today : (c.state == .done ? .done : (sidebarItem(for: c)))
             selectedCommitmentId = id
         }
         openMainWindow()
     }
 
     private func sidebarItem(for c: Commitment) -> SidebarItem {
-        let g = CommitmentGrouping.group(c, now: Date())
-        return (g == .overdue || g == .today) ? .today : .upcoming
+        let now = Date()
+        if Plan.isToday(c, now: now) { return .today }
+        if c.someday { return .someday }
+        if c.startAt != nil || c.dueAt != nil { return .upcoming }
+        return c.listId == nil && !c.isBoardTask ? .inbox : .anytime
     }
 
     /// Opens (or brings forward) the main window. Set by the SwiftUI scene once it exists.
@@ -182,26 +219,75 @@ final class AppModel {
 }
 
 enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
-    case today, upcoming, calendar, suggestions, done
+    case inbox, today, upcoming, anytime, someday, done, calendar, board, matrix, focus, habits, foundry, filtered
     var id: String { rawValue }
+
+    /// The fixed destinations, in sidebar order (⌘1…⌘8).
+    static let planning: [SidebarItem] = [.inbox, .today, .upcoming, .anytime, .someday, .done]
+    static let views: [SidebarItem] = [.calendar, .board, .matrix, .focus, .habits, .foundry]
+    static var navigable: [SidebarItem] { planning + views }
 
     var title: String {
         switch self {
+        case .inbox: "Inbox"
         case .today: "Today"
         case .upcoming: "Upcoming"
+        case .anytime: "Anytime"
+        case .someday: "Someday"
+        case .done: "Logbook"
         case .calendar: "Calendar"
-        case .suggestions: "Suggestions"
-        case .done: "Done"
+        case .board: "Board"
+        case .matrix: "Priorities"
+        case .focus: "Focus"
+        case .habits: "Habits"
+        case .foundry: "Foundry"
+        case .filtered: "List"
         }
     }
 
     var symbol: String {
         switch self {
-        case .today: "sun.max"
-        case .upcoming: "calendar.day.timeline.left"
-        case .calendar: "calendar"
-        case .suggestions: "tray"
-        case .done: "checkmark.circle"
+        case .inbox: "tray"
+        case .today: "star.fill"
+        case .upcoming: "calendar"
+        case .anytime: "square.stack"
+        case .someday: "archivebox"
+        case .done: "book.closed"
+        case .calendar: "calendar.day.timeline.left"
+        case .board: "rectangle.split.3x1"
+        case .matrix: "square.grid.2x2"
+        case .focus: "timer"
+        case .habits: "flame"
+        case .foundry: "bubble.left.and.text.bubble.right"
+        case .filtered: "list.bullet"
         }
     }
+
+    var tint: Color {
+        switch self {
+        case .inbox: .blue
+        case .today: .yellow
+        case .upcoming: .red
+        case .anytime: .teal
+        case .someday: .brown
+        case .done: .green
+        default: .secondary
+        }
+    }
+}
+
+/// Saved filters, stored in UserDefaults (they're a personal view, not shared data).
+enum SmartLists {
+    static let key = "smartLists.v1"
+    static func load() -> [TodoFilter] {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([TodoFilter].self, from: data)) ?? []
+    }
+    static func save(_ lists: [TodoFilter]) {
+        if let data = try? JSONEncoder().encode(lists) { UserDefaults.standard.set(data, forKey: key) }
+    }
+}
+
+extension TodoList {
+    var icon: String { symbol ?? "list.bullet" }
 }
