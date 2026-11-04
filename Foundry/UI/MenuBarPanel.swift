@@ -68,7 +68,10 @@ struct MenuBarPanel: View {
     /// A native List with Sections: system spacing, section headers, keyboard, swipe actions.
     private var list: some View {
         let now = Date()
-        let sections = CommitmentGrouping.sections(model.store.items, now: now, include: [.overdue, .today, .next7, .later, .noDate])
+        let today = Plan.today(model.store.items, now: now)
+        let next = Plan.upcoming(model.store.items, now: now).prefix(2)
+        let inbox = Plan.inbox(model.store.items, now: now)
+        let sections = today + next + (inbox.isEmpty ? [] : [Plan.Section(id: "inbox", title: "Inbox", items: inbox)])
         let review = CommitmentGrouping.suggestions(model.store.items)
         return List {
             if !review.isEmpty {
@@ -78,14 +81,14 @@ struct MenuBarPanel: View {
                     SuggestionsHeader(count: review.count)
                 }
             }
-            ForEach(sections, id: \.group) { section in
+            ForEach(sections) { section in
                 Section {
-                    ForEach(section.items.prefix(section.group == .later || section.group == .noDate ? 4 : 50)) { c in
+                    ForEach(section.items.prefix(section.id == "inbox" ? 5 : 50)) { c in
                         CommitmentRow(commitment: c, compact: true)
                     }
                 } header: {
-                    Text(section.group.title)
-                        .foregroundStyle(section.group == .overdue ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                    Text(section.title)
+                        .foregroundStyle(section.isAlert ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
                 }
             }
         }
@@ -129,12 +132,13 @@ struct MenuBarPanel: View {
 enum PanelSummary {
     /// "1 due today · 13 on your boards" / "Overdue: 2 · 1 due today" / "All clear".
     static func line(_ items: [Commitment], now: Date) -> String {
-        let overdue = CommitmentGrouping.sections(items, now: now, include: [.overdue]).first?.items.count ?? 0
-        let today = CommitmentGrouping.sections(items, now: now, include: [.today]).first?.items.count ?? 0
+        let plan = Plan.today(items, now: now)
+        let overdue = plan.first { $0.id == "overdue" }?.items.count ?? 0
+        let today = plan.filter { $0.id != "overdue" }.reduce(0) { $0 + $1.items.count }
         let board = items.filter { $0.isBoardTask && $0.state == .open }.count
         var parts: [String] = []
         if overdue > 0 { parts.append("\(overdue) overdue") }
-        if today > 0 { parts.append("\(today) due today") }
+        if today > 0 { parts.append("\(today) today") }
         if board > 0 { parts.append("\(board) on your boards") }
         return parts.isEmpty ? "All clear" : parts.joined(separator: " · ")
     }
