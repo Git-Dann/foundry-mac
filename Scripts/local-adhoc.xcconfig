@@ -1,0 +1,12 @@
+// Used by Scripts/install-local.sh: a Release build signed ad hoc for this Mac only.
+// Without a provisioning profile the App Group can't be signed in, so the app has no
+// entitlements and the widget keeps its sandbox only (it can't read the app's data).
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+LOCAL_ENTITLEMENTS_Foundry =
+LOCAL_ENTITLEMENTS_FoundryWidgets = FoundryWidgets/FoundryWidgets.debug.entitlements
+CODE_SIGN_ENTITLEMENTS = $(LOCAL_ENTITLEMENTS_$(TARGET_NAME))
+// The hardened runtime (needed only for notarisation) makes dyld refuse Sparkle.framework in
+// an ad-hoc app. install-local.sh turns it off on the command line, because the target's own
+// Release setting outranks this file.

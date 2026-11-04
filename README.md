@@ -57,6 +57,17 @@ The data and the reading of your sources live in Foundry (Backstage → Commitme
 - A Foundry server with the Commitments API (docs-by-gitwork PR #804). Against a server
   without it, the app says "Commitments aren't on this Foundry server yet."
 
+## Install on your Mac
+
+```bash
+Scripts/install-local.sh
+```
+
+Builds Release, installs it to `/Applications` (the old copy goes to the Trash) and opens it.
+It's signed ad hoc, so it runs only on this Mac and the widget can't read the app's data. Once
+your Apple ID is in Xcode → Settings → Accounts, `TEAM=B27Y4M6S3Y Scripts/install-local.sh`
+signs it with the GIT WORK team and the widget works too.
+
 ## Build and test
 
 ```bash

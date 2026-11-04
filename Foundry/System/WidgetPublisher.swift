@@ -18,7 +18,7 @@ enum WidgetPublisher {
     }
 
     static func publish(_ items: [Commitment], signedIn: Bool) {
-        guard Bundle.main.bundleIdentifier != nil else { return }
+        guard Bundle.main.bundleIdentifier != nil, Entitlements.hasAppGroup else { return }
         AppGroupStore.write(snapshot(items, signedIn: signedIn))
     }
 }
