@@ -86,6 +86,7 @@ final class CommitmentStore {
     @ObservationIgnored private let cache: CommitmentCache
     @ObservationIgnored private var userId: String?
     @ObservationIgnored private var flushing = false
+    @ObservationIgnored private var lastAutoCheck: Date?
     @ObservationIgnored var onChange: (([Commitment]) -> Void)?
     @ObservationIgnored var onUnauthorized: (() -> Void)?
     @ObservationIgnored var now: () -> Date = Date.init
@@ -143,16 +144,44 @@ final class CommitmentStore {
         // Send queued edits first, so the list we fetch already includes them.
         await flush()
         do {
-            let response = try await service.list()
-            isOffline = false
-            settings = response.settings
-            loadedAt = now()
-            items = Self.reconcile(server: response.commitments, outbox: outbox, now: now())
-            if lastError?.hasPrefix("Couldn't reach") == true { lastError = nil }
-            persistAndNotify()
+            try await load()
+            // Read the person's sources when they're stale, so suggestions arrive without
+            // anyone pressing Check now. The server only reads them by itself for people with
+            // sent email or Slack switched on.
+            if Self.sourcesAreDue(settings: settings, lastAutoCheck: lastAutoCheck, now: now()) {
+                lastAutoCheck = now()
+                isCheckingSources = true
+                defer { isCheckingSources = false }
+                _ = try await service.sync()
+                try await load()
+            }
         } catch {
             handle(error, context: "Couldn't reach Foundry")
         }
+    }
+
+    private func load() async throws {
+        let response = try await service.list()
+        isOffline = false
+        settings = response.settings
+        loadedAt = now()
+        items = Self.reconcile(server: response.commitments, outbox: outbox, now: now())
+        if lastError?.hasPrefix("Couldn't reach") == true { lastError = nil }
+        persistAndNotify()
+    }
+
+    /// When the last read is over this old, opening or refreshing the app reads the sources.
+    static let autoCheckInterval: TimeInterval = 30 * 60
+
+    /// Due when a source is on, the server isn't already reading, the last read is stale, and
+    /// this app hasn't tried in the last half hour. The last rule matters: a read where one
+    /// source fails doesn't move `lastSyncedAt` on, and without it every refresh would retry.
+    static func sourcesAreDue(settings: CommitmentSettings, lastAutoCheck: Date?, now: Date) -> Bool {
+        let anyOn = settings.gmailEnabled || settings.slackEnabled || settings.meetingsEnabled || settings.calendarEnabled
+        guard anyOn, !settings.syncing else { return false }
+        if let last = settings.lastSyncedAt, now.timeIntervalSince(last) < autoCheckInterval { return false }
+        if let tried = lastAutoCheck, now.timeIntervalSince(tried) < autoCheckInterval { return false }
+        return true
     }
 
     /// The server's list with our not-yet-sent edits laid over it, so a refresh never makes an
@@ -237,6 +266,7 @@ final class CommitmentStore {
         isCheckingSources = true
         defer { isCheckingSources = false }
         do {
+            lastAutoCheck = now()
             let result = try await service.sync()
             lastCheckSummary = Self.summary(of: result)
             await refresh()

@@ -11,6 +11,11 @@ actor FakeService: CommitmentsService {
 
     func setOffline(_ v: Bool) { offline = v }
     func setRefuse(_ v: Bool) { refuse = v }
+    var settings = CommitmentSettings.empty
+    var syncAdvancesLastSynced = true
+    func setSettings(_ s: CommitmentSettings) { settings = s }
+    func setSyncAdvances(_ v: Bool) { syncAdvancesLastSynced = v }
+    var syncCount: Int { calls.filter { $0 == "sync" }.count }
     func seed(_ c: Commitment) { server[c.id] = c }
 
     private func check(_ name: String) throws {
@@ -21,7 +26,7 @@ actor FakeService: CommitmentsService {
 
     func list() async throws -> CommitmentsResponse {
         try check("list")
-        return CommitmentsResponse(commitments: server.values.sorted { $0.createdAt > $1.createdAt }, settings: .empty)
+        return CommitmentsResponse(commitments: server.values.sorted { $0.createdAt > $1.createdAt }, settings: settings)
     }
     func create(_ new: NewCommitment) async throws -> Commitment {
         try check("create")
@@ -37,7 +42,11 @@ actor FakeService: CommitmentsService {
         return server[id]!
     }
     func delete(id: String) async throws { try check("delete:\(id)"); server[id] = nil }
-    func sync() async throws -> CommitmentSyncResult { try check("sync"); return .init(status: "ok", added: 0, sources: [:]) }
+    func sync() async throws -> CommitmentSyncResult {
+        try check("sync")
+        if syncAdvancesLastSynced { settings.lastSyncedAt = Date() }
+        return .init(status: syncAdvancesLastSynced ? "ok" : "partial", added: 0, sources: [:])
+    }
     func updateSettings(_ s: CommitmentSettings) async throws -> CommitmentSettings { try check("settings"); return s }
 }
 
@@ -157,5 +166,40 @@ final class CommitmentStoreTests: XCTestCase {
         var q = CommitmentStore.coalesce([], adding: .update(id: "a", CommitmentPatch(state: .done)))
         q = CommitmentStore.coalesce(q, adding: .update(id: "a", CommitmentPatch(state: .open, snoozedUntil: .clear)))
         XCTAssertEqual(q, [.update(id: "a", CommitmentPatch(state: .open, snoozedUntil: .clear))])
+    }
+
+    func testOpeningReadsStaleSourcesOnce() async {
+        let service = FakeService()
+        let store = makeStore(service)
+        await store.refresh()
+        let first = await service.syncCount
+        XCTAssertEqual(first, 1, "Never read: the first refresh reads the sources")
+        XCTAssertNotNil(store.settings.lastSyncedAt)
+        await store.refresh()
+        let second = await service.syncCount
+        XCTAssertEqual(second, 1, "Read just now: the next refresh doesn't read again")
+    }
+
+    func testAPartialReadDoesNotRetryOnEveryRefresh() async {
+        let service = FakeService()
+        await service.setSyncAdvances(false) // one source failed, so lastSyncedAt stays old
+        let store = makeStore(service)
+        for _ in 0..<4 { await store.refresh() }
+        let count = await service.syncCount
+        XCTAssertEqual(count, 1)
+    }
+
+    func testNothingIsReadWhenEverySourceIsOffOrAlreadyRunning() {
+        var s = CommitmentSettings.empty
+        s.meetingsEnabled = false; s.calendarEnabled = false
+        XCTAssertFalse(CommitmentStore.sourcesAreDue(settings: s, lastAutoCheck: nil, now: Date()))
+        var running = CommitmentSettings.empty
+        running.syncing = true
+        XCTAssertFalse(CommitmentStore.sourcesAreDue(settings: running, lastAutoCheck: nil, now: Date()))
+        var stale = CommitmentSettings.empty
+        stale.lastSyncedAt = Date().addingTimeInterval(-31 * 60)
+        XCTAssertTrue(CommitmentStore.sourcesAreDue(settings: stale, lastAutoCheck: nil, now: Date()))
+        stale.lastSyncedAt = Date().addingTimeInterval(-29 * 60)
+        XCTAssertFalse(CommitmentStore.sourcesAreDue(settings: stale, lastAutoCheck: nil, now: Date()))
     }
 }
