@@ -33,7 +33,7 @@ struct FoundryApp: App {
     @NSApplicationDelegateAdaptor(FoundryAppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Window("Commitments", id: "main") {
+        Window("Foundry", id: "main") {
             MainWindow().environment(model)
         }
         .defaultSize(width: 1080, height: 700)
@@ -86,9 +86,9 @@ struct CommitmentCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(!model.auth.isSignedIn)
         }
-        CommandMenu("Commitment") {
+        CommandMenu("To-do") {
             let selected = model.selectedCommitmentId.flatMap { model.store.commitment(id: $0) }
-            Button(selected?.state == .suggested ? "Add to My Commitments" : "Mark Done") {
+            Button(selected?.state == .suggested ? "Add to My To-dos" : "Mark Done") {
                 guard let c = selected else { return }
                 if c.state == .suggested { model.store.accept(c.id) } else { model.complete(c.id) }
             }

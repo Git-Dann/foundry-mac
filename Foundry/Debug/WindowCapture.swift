@@ -32,14 +32,18 @@ enum WindowCapture {
                     w.setFrame(NSRect(x: 80, y: 80, width: 1180, height: 720), display: true)
                     try? await Task.sleep(for: .seconds(1))
                     save(w, to: dir.appending(path: "window-\(name).png"))
-                    model.selection = .suggestions
-                    model.selectedCommitmentId = model.store.items.first { $0.state == .suggested }?.id
+                    model.selection = .today
+                    model.selectedCommitmentId = model.store.items.first { $0.isBoardTask && $0.state == .open }?.id
                     try? await Task.sleep(for: .seconds(1))
                     save(w, to: dir.appending(path: "window-suggestions-\(name).png"))
                     model.selection = .calendar
                     w.setFrame(NSRect(x: 80, y: 80, width: 1440, height: 860), display: true)
                     try? await Task.sleep(for: .seconds(1.5))
                     save(w, to: dir.appending(path: "calendar-\(name).png"))
+                    model.selection = .foundry
+                    w.setFrame(NSRect(x: 80, y: 80, width: 1180, height: 720), display: true)
+                    try? await Task.sleep(for: .seconds(4))
+                    save(w, to: dir.appending(path: "foundry-\(name).png"))
                     model.selection = .today
                     w.setFrame(NSRect(x: 80, y: 80, width: 1180, height: 720), display: true)
                 }

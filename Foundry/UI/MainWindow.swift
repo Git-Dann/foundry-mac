@@ -7,7 +7,14 @@ struct MainWindow: View {
 
     var body: some View {
         Group {
-            if model.auth.isSignedIn && model.selection == .calendar {
+            if model.auth.isSignedIn && model.selection == .foundry {
+                NavigationSplitView(columnVisibility: $columns) {
+                    Sidebar()
+                        .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
+                } detail: {
+                    FeedView()
+                }
+            } else if model.auth.isSignedIn && model.selection == .calendar {
                 // The calendar wants the whole width, so it replaces the list and detail columns.
                 NavigationSplitView(columnVisibility: $columns) {
                     Sidebar()
@@ -26,7 +33,7 @@ struct MainWindow: View {
                     if let id = model.selectedCommitmentId, model.store.commitment(id: id) != nil {
                         CommitmentDetail(id: id).id(id)
                     } else {
-                        QuietEmpty(title: "Nothing selected", detail: "Pick a commitment to see where it came from.", symbol: "text.quote")
+                        QuietEmpty(title: "Nothing selected", detail: "Pick a to-do to see its details.", symbol: "checklist")
                     }
                 }
             } else {
@@ -83,7 +90,7 @@ struct Sidebar: View {
         switch item {
         case .today: CommitmentGrouping.dueNowCount(items, now: now)
         case .upcoming: CommitmentGrouping.sections(items, now: now, include: [.next7, .later, .noDate]).reduce(0) { $0 + $1.items.count }
-        case .suggestions: CommitmentGrouping.suggestions(items).count
+        case .foundry: model.feed.mentionCount
         case .done, .calendar: 0
         }
     }
@@ -100,13 +107,13 @@ struct CommitmentListView: View {
         let filtered = matching(model.store.items)
         List(selection: $model.selectedCommitmentId) {
             if model.selection == .today || model.selection == .upcoming {
-                QuickAddField(prompt: "Add a commitment. Try “Send Acme the deck fri”", focusToken: model.focusQuickAddToken)
+                QuickAddField(prompt: "Add a to-do. Try “Send Acme the deck fri”", focusToken: model.focusQuickAddToken)
                     .listRowSeparator(.hidden)
                     .padding(.vertical, 4)
+                if model.selection == .today {
+                    SuggestionsCard().listRowSeparator(.hidden)
+                }
                 UndoBar().listRowSeparator(.hidden)
-            }
-            if let problem = SourceProblem.summary(model.store.settings.sourceStatus) {
-                SourceNotice(text: problem).listRowSeparator(.hidden)
             }
             switch model.selection {
             case .today:
@@ -127,13 +134,7 @@ struct CommitmentListView: View {
                         ForEach(s.items) { CommitmentRow(commitment: $0).tag($0.id) }
                     }
                 }
-            case .suggestions:
-                let review = CommitmentGrouping.suggestions(filtered)
-                if review.isEmpty {
-                    emptyRow("Nothing to review", detail: "When Foundry reads a promise in your email, Slack or meetings, it waits here for you to add it or not.")
-                }
-                ForEach(review) { SuggestionRow(commitment: $0).tag($0.id) }
-            case .calendar:
+            case .calendar, .foundry:
                 EmptyView()
             case .done:
                 let done = CommitmentGrouping.done(filtered)
@@ -143,7 +144,18 @@ struct CommitmentListView: View {
         }
         .listStyle(.inset)
         .animation(.easeOut(duration: 0.18), value: model.store.items.map(\.state))
-        .searchable(text: $search, placement: .toolbar, prompt: "Search commitments")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            let notes = [model.store.boardProblem, SourceProblem.summary(model.store.settings.sourceStatus)].compactMap { $0 }
+            if !notes.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(notes, id: \.self) { SourceFootnote(text: $0) }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.bar)
+            }
+        }
+        .searchable(text: $search, placement: .toolbar, prompt: "Search to-dos")
         .searchFocused($searchFocused)
         .onChange(of: model.focusSearchToken) { searchFocused = true }
         .onKeyPress(.space) {
@@ -173,8 +185,12 @@ struct CommitmentListView: View {
     private var subtitle: String {
         if model.store.isCheckingSources { return "Checking your sources…" }
         if let e = model.store.lastError { return e }
-        if let at = model.store.settings.lastSyncedAt { return "Sources read \(at.formatted(.relative(presentation: .named)))" }
-        return ""
+        let now = Date()
+        let due = CommitmentGrouping.dueNowCount(model.store.items, now: now)
+        let board = model.store.items.filter { $0.isBoardTask && $0.state == .open }.count
+        var parts: [String] = [due == 0 ? "Nothing due today" : "\(due) due today"]
+        if board > 0 { parts.append("\(board) on your Foundry boards") }
+        return parts.joined(separator: " · ")
     }
 
     private func emptyRow(_ title: String, detail: String?) -> some View {
@@ -199,23 +215,5 @@ struct CommitmentListView: View {
         return items.filter { c in
             [c.title, c.notes, c.counterpart, c.quote, c.evidenceLabel].compactMap { $0?.lowercased() }.contains { $0.contains(q) }
         }
-    }
-}
-
-/// Shown at the top of the list when a source couldn't be read. Plain words, one way to act.
-struct SourceNotice: View {
-    @Environment(\.openSettings) private var openSettings
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            Text(text).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 6)
-            Button("Sources…") { openSettings() }.controlSize(.small)
-        }
-        .font(.callout)
-        .padding(10)
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
     }
 }

@@ -45,7 +45,7 @@ private struct GeneralSettings: View {
             }
             Section("Quick add") {
                 Toggle("Open quick add with \(GlobalHotKey.Combo.quickAdd.label)", isOn: $hotkey)
-                Text("Also in Spotlight and Shortcuts as “Add Commitment”.")
+                Text("Also in Spotlight and Shortcuts as “Add To-do”.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section("Updates") {
@@ -79,7 +79,7 @@ private struct SourcesSettings: View {
     var body: some View {
         Form {
             Section {
-                ForEach(CommitmentSettings.Toggle.allCases) { source in
+                ForEach(CommitmentSettings.Toggle.offered) { source in
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle(isOn: binding(source)) {
                             Label(source.title, systemImage: source.symbol)

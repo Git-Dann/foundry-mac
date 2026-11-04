@@ -67,7 +67,7 @@ struct CommitmentRow: View {
                 meta
             }
             Spacer(minLength: 4)
-            if hovering && commitment.state == .open {
+            if hovering && commitment.state == .open && !commitment.isBoardTask {
                 SnoozeMenu(id: commitment.id)
                     .transition(.opacity)
             }
@@ -86,10 +86,12 @@ struct CommitmentRow: View {
                     Text(DueText.string(due))
                         .foregroundStyle(isOverdue ? Color.red : Color.secondary)
                 }
-                if let counterpart = commitment.counterpart, !counterpart.isEmpty {
+                if commitment.isBoardTask, let client = commitment.counterpart, !client.isEmpty {
+                    BoardTag(client: client)
+                } else if let counterpart = commitment.counterpart, !counterpart.isEmpty {
                     Text(counterpart).foregroundStyle(.secondary)
                 }
-                if commitment.source != .manual {
+                if commitment.source != .manual && !commitment.isBoardTask {
                     Label(commitment.source.label, systemImage: commitment.source.symbol)
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.tertiary)
@@ -145,25 +147,27 @@ struct CommitmentContextMenu: View {
         switch commitment.state {
         case .open:
             Button("Mark Done") { model.complete(commitment.id) }
-            Menu("Snooze") {
-                ForEach(SnoozeOption.allCases) { o in
-                    Button(o.title) { model.store.snooze(commitment.id, until: o.until(from: Date())) }
+            if !commitment.isBoardTask {
+                Menu("Snooze") {
+                    ForEach(SnoozeOption.allCases) { o in
+                        Button(o.title) { model.store.snooze(commitment.id, until: o.until(from: Date())) }
+                    }
                 }
             }
             if commitment.isSnoozed(at: Date()) {
                 Button("Wake Up") { model.store.unsnooze(commitment.id) }
             }
         case .suggested:
-            Button("Add to My Commitments") { model.store.accept(commitment.id) }
+            Button("Add to My To-dos") { model.store.accept(commitment.id) }
         case .done, .dismissed:
             Button("Reopen") { model.store.reopen(commitment.id) }
         }
         Divider()
         Button("Open in Window") { model.showInWindow(id: commitment.id) }
         if let link = commitment.evidenceLink {
-            Button("Open \(commitment.source.label)") { NSWorkspace.shared.open(link) }
+            Button(commitment.isBoardTask ? "Open on Board" : "Open \(commitment.source.label)") { NSWorkspace.shared.open(link) }
         }
-        if commitment.state != .dismissed {
+        if commitment.state != .dismissed && !commitment.isBoardTask {
             Divider()
             Button(commitment.state == .suggested ? "Not Mine" : "Dismiss") { model.store.dismiss(commitment.id) }
         }
@@ -241,10 +245,121 @@ struct EvidenceLabel: View {
     }
 }
 
+/// "FELLAS" on a board task, so it reads as client work at a glance.
+struct BoardTag: View {
+    let client: String
+
+    var body: some View {
+        Text(client.uppercased())
+            .font(.caption2.weight(.semibold))
+            .tracking(0.4)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+            .help("A task on \(client)'s Foundry board")
+    }
+}
+
+/// "3 suggested from Foundry · Review". Suggestions wait behind this rather than filling the
+/// list: nothing joins your to-dos until you add it.
+struct SuggestionsCard: View {
+    @Environment(AppModel.self) private var model
+    @State private var open = false
+
+    var body: some View {
+        let review = CommitmentGrouping.suggestions(model.store.items)
+        if !review.isEmpty {
+            Button { open = true } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles").foregroundStyle(.tint)
+                    Text(review.count == 1 ? "1 suggested from Foundry" : "\(review.count) suggested from Foundry")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Text("Review").foregroundStyle(.tint)
+                }
+                .font(.callout)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $open, arrowEdge: .bottom) {
+                SuggestionsReview(onDone: { open = false })
+            }
+        }
+    }
+}
+
+struct SuggestionsReview: View {
+    @Environment(AppModel.self) private var model
+    var onDone: () -> Void
+
+    var body: some View {
+        let review = CommitmentGrouping.suggestions(model.store.items)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Suggested from Foundry").font(.headline)
+                Spacer()
+                if review.count > 1 {
+                    Button("Not mine, all") {
+                        for c in review { model.store.dismiss(c.id) }
+                        onDone()
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            Text("Read from your meetings, email and Slack. Nothing is added until you say so.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 6)
+            Divider()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(review) { c in
+                        SuggestionRow(commitment: c, compact: true).padding(.horizontal, 14)
+                        Divider().padding(.leading, 14)
+                    }
+                    if review.isEmpty {
+                        Text("All reviewed.").foregroundStyle(.secondary).padding(20)
+                    }
+                }
+            }
+            .frame(maxHeight: 420)
+        }
+        .frame(width: 380)
+        .onChange(of: review.isEmpty) { _, empty in if empty { onDone() } }
+    }
+}
+
+/// One quiet line when a source couldn't be read. It doesn't push your to-dos down the page.
+struct SourceFootnote: View {
+    @Environment(\.openSettings) private var openSettings
+    let text: String
+
+    var body: some View {
+        Button { openSettings() } label: {
+            Label(text, systemImage: "exclamationmark.circle")
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .help(text + " Click to see your sources.")
+    }
+}
+
 /// The quick-add line used in the menu bar and the window.
 struct QuickAddField: View {
     @Environment(AppModel.self) private var model
-    var prompt = "I promised to…"
+    var prompt = "Add a to-do"
     var focusToken: Int = 0
     @State private var text = ""
     @FocusState private var focused: Bool

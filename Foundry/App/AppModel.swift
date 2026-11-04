@@ -16,6 +16,7 @@ final class AppModel {
     let network: NetworkMonitor
     let notifications: NotificationScheduler
     let calendar: CalendarStore
+    let feed: FoundryFeedStore
 
     var selection: SidebarItem = .today
     var selectedCommitmentId: String?
@@ -43,6 +44,18 @@ final class AppModel {
             baseURL: { await MainActor.run { environment.baseURL } },
             token: { await MainActor.run { auth.token } }
         )
+        self.feed = FoundryFeedStore(
+            baseURL: { await MainActor.run { environment.baseURL } },
+            token: { await MainActor.run { auth.token } }
+        )
+        // The sign-in token often carries no name; "dan@gitwork.co.uk" still says who "Dan" is.
+        self.feed.myName = { [weak auth] in
+            MainActor.assumeIsolated {
+                guard let user = auth?.currentUser else { return nil }
+                if let name = user.name, !name.isEmpty { return name }
+                return user.email.split(separator: "@").first.map(String.init)
+            }
+        }
 
         Commitment.webBase = environment.baseURL
         store.onChange = { [weak self] items in self?.itemsChanged(items) }
@@ -153,7 +166,7 @@ final class AppModel {
 
     func showInWindow(id: String?) {
         if let id, let c = store.commitment(id: id) {
-            selection = c.state == .suggested ? .suggestions : (c.state == .done ? .done : (sidebarItem(for: c)))
+            selection = c.state == .suggested ? .today : (c.state == .done ? .done : (sidebarItem(for: c)))
             selectedCommitmentId = id
         }
         openMainWindow()
@@ -182,7 +195,7 @@ final class AppModel {
 }
 
 enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
-    case today, upcoming, calendar, suggestions, done
+    case today, upcoming, calendar, foundry, done
     var id: String { rawValue }
 
     var title: String {
@@ -190,7 +203,7 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .today: "Today"
         case .upcoming: "Upcoming"
         case .calendar: "Calendar"
-        case .suggestions: "Suggestions"
+        case .foundry: "Foundry"
         case .done: "Done"
         }
     }
@@ -200,7 +213,7 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .today: "sun.max"
         case .upcoming: "calendar.day.timeline.left"
         case .calendar: "calendar"
-        case .suggestions: "tray"
+        case .foundry: "bubble.left.and.text.bubble.right"
         case .done: "checkmark.circle"
         }
     }

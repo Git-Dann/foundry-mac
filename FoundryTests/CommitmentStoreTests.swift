@@ -48,6 +48,31 @@ actor FakeService: CommitmentsService {
         return .init(status: syncAdvancesLastSynced ? "ok" : "partial", added: 0, sources: [:])
     }
     func updateSettings(_ s: CommitmentSettings) async throws -> CommitmentSettings { try check("settings"); return s }
+
+    var board: [String: BoardTaskDTO] = [:]
+    var boardFails = false
+    func seedBoard(_ t: BoardTaskDTO) { board[t.id] = t }
+    func setBoardFails(_ v: Bool) { boardFails = v }
+    func boardTasks(assigneeId: String) async throws -> [BoardTaskDTO] {
+        calls.append("board:\(assigneeId)")
+        if boardFails { throw AppError.http(status: 500, message: "Board down") }
+        return Array(board.values)
+    }
+    func updateBoardTask(id: String, status: String?, dueDate: CommitmentPatch.Field<String>?) async throws -> BoardTaskDTO {
+        calls.append("boardUpdate:\(id):\(status ?? "-"):\(dueDate.map { "\($0)" } ?? "-")")
+        guard var t = board[id] else { throw AppError.http(status: 404, message: "Not found") }
+        if let status { t.status = status; t.completedAt = status == "DONE" ? Date() : nil }
+        if let dueDate { if case .set(let d) = dueDate { t.dueDate = d } else { t.dueDate = nil } }
+        board[id] = t
+        return t
+    }
+}
+
+func boardTask(_ id: String, _ title: String, status: String = "DOING", due: String? = nil) -> BoardTaskDTO {
+    BoardTaskDTO(
+        id: id, assignees: [.init(id: "u1")], title: title, status: status, dueDate: due, completedAt: nil, archivedAt: nil, parentId: nil,
+        client: .init(id: "c1", name: "Fellas", slug: "fellas"), createdAt: Date(), updatedAt: Date()
+    )
 }
 
 @MainActor
@@ -201,5 +226,70 @@ final class CommitmentStoreTests: XCTestCase {
         XCTAssertTrue(CommitmentStore.sourcesAreDue(settings: stale, lastAutoCheck: nil, now: Date()))
         stale.lastSyncedAt = Date().addingTimeInterval(-29 * 60)
         XCTAssertFalse(CommitmentStore.sourcesAreDue(settings: stale, lastAutoCheck: nil, now: Date()))
+    }
+
+    // MARK: Board tasks
+
+    func testBoardTasksJoinYourOwnToDos() async {
+        let fake = FakeService()
+        await fake.seedBoard(boardTask("t1", "Fix login redirect", due: "2026-11-06"))
+        await fake.seedBoard(boardTask("t2", "Someday idea", status: "BACKLOG"))
+        await fake.seedBoard(boardTask("t3", "Planned", status: "BACKLOG", due: "2026-11-10T00:00:00.000Z"))
+        var someoneElses = boardTask("t4", "Harry's task")
+        someoneElses.assignees = [.init(id: "u2")]
+        await fake.seedBoard(someoneElses)
+        let store = CommitmentStore(service: fake, cache: cache)
+        store.activate(userId: "u1")
+        await store.refresh()
+        let board = store.items.filter(\.isBoardTask)
+        XCTAssertEqual(Set(board.map(\.title)), ["Fix login redirect", "Planned"], "no undated backlog, nobody else's tasks")
+        XCTAssertEqual(board.first { $0.title == "Fix login redirect" }?.counterpart, "Fellas")
+        let calls = await fake.calls
+        XCTAssertTrue(calls.contains("board:u1"))
+    }
+
+    func testTickingABoardTaskMarksItDoneOnTheBoardAndReopenPutsItBack() async {
+        let fake = FakeService()
+        await fake.seedBoard(boardTask("t1", "Fix login redirect", status: "IN_REVIEW"))
+        let store = CommitmentStore(service: fake, cache: cache)
+        store.activate(userId: "u1")
+        await store.refresh()
+        store.complete("task:t1")
+        await store.flush()
+        var status = await fake.board["t1"]?.status
+        XCTAssertEqual(status, "DONE")
+        store.reopen("task:t1")
+        await store.flush()
+        status = await fake.board["t1"]?.status
+        XCTAssertEqual(status, "IN_REVIEW")
+    }
+
+    func testRedatingABoardTaskSendsTheDay() async {
+        let fake = FakeService()
+        await fake.seedBoard(boardTask("t1", "Fix login redirect"))
+        let store = CommitmentStore(service: fake, cache: cache)
+        store.activate(userId: "u1")
+        await store.refresh()
+        let due = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 9, hour: 10))!
+        store.update("task:t1", CommitmentPatch(dueAt: .set(due)))
+        await store.flush()
+        let day = await fake.board["t1"]?.dueDate
+        XCTAssertEqual(day, "2026-11-09")
+        store.snooze("task:t1", until: due)
+        XCTAssertNil(store.commitment(id: "task:t1")?.snoozedUntil, "board tasks aren't snoozed")
+    }
+
+    func testAFailedBoardReadKeepsYourToDosAndTheLastBoardList() async {
+        let fake = FakeService()
+        await fake.seedBoard(boardTask("t1", "Fix login redirect"))
+        let store = CommitmentStore(service: fake, cache: cache)
+        store.activate(userId: "u1")
+        await store.refresh()
+        await fake.setBoardFails(true)
+        store.add(text: "Book dentist")
+        await store.refresh()
+        XCTAssertNotNil(store.boardProblem)
+        XCTAssertTrue(store.items.contains { $0.title == "Fix login redirect" })
+        XCTAssertTrue(store.items.contains { $0.title == "Book dentist" })
     }
 }

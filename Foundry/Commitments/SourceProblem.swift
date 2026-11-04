@@ -7,7 +7,7 @@ enum SourceProblem {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = text.lowercased()
         if lower.contains("credit balance is too low") || lower.contains("insufficient_quota") || lower.contains("billing") {
-            return "Foundry's AI account is out of credit, so this couldn't be read. An admin needs to top it up."
+            return "Foundry's AI credit has run out. An admin needs to top it up."
         }
         if lower.contains("authentication_error") || lower.contains("invalid x-api-key") || lower.contains("invalid api key") {
             return "Foundry's AI key isn't valid. An admin needs to update it in Foundry Settings → Integrations."
@@ -43,9 +43,9 @@ enum SourceProblem {
 
     private static func clip(_ s: String) -> String { s.count > 220 ? String(s.prefix(217)) + "…" : s }
 
-    /// "Sent email and Slack couldn't be read: <reason>". Nil when every source worked.
+    /// "Sent email and Slack are paused. <reason>". Nil when every source worked.
     static func summary(_ sources: [String: CommitmentSourceStatus]) -> String? {
-        let failed = CommitmentSettings.Toggle.allCases.compactMap { t -> (String, String)? in
+        let failed = CommitmentSettings.Toggle.offered.compactMap { t -> (String, String)? in
             guard let s = sources[t.rawValue], !s.ok else { return nil }
             return (t.title, plain(s.message))
         }
@@ -53,7 +53,7 @@ enum SourceProblem {
         let names = ListFormatter.localizedString(byJoining: failed.map(\.0))
         let reasons = Set(failed.map(\.1))
         return reasons.count == 1
-            ? "\(names) couldn't be read. \(reasons.first!)"
-            : "\(names) couldn't be read. See Settings → Sources."
+            ? "\(names) \(failed.count == 1 ? "is" : "are") paused. \(reasons.first!)"
+            : "\(names) \(failed.count == 1 ? "is" : "are") paused. See Settings → Sources."
     }
 }

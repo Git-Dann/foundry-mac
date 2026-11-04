@@ -33,7 +33,7 @@ struct CommitmentDetail: View {
             .onAppear { load(c) }
             .onChange(of: focus) { old, _ in if old != nil { save() } }
             .onDisappear { save() }
-            .confirmationDialog("Delete this commitment?", isPresented: $confirmDelete) {
+            .confirmationDialog("Delete this to-do?", isPresented: $confirmDelete) {
                 Button("Delete", role: .destructive) {
                     model.store.delete(id)
                     model.selectedCommitmentId = nil
@@ -56,18 +56,18 @@ struct CommitmentDetail: View {
                     Label("Not sent yet", systemImage: "icloud.and.arrow.up").font(.caption).foregroundStyle(.secondary)
                 }
             }
-            TextField("Commitment", text: $title, axis: .vertical)
+            TextField("To-do", text: $title, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.title2.weight(.semibold))
                 .focused($focus, equals: .title)
                 .onSubmit { save() }
-                .disabled(c.state == .dismissed)
+                .disabled(c.state == .dismissed || c.isBoardTask)
         }
     }
 
     private func evidence(_ c: Commitment) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Where this came from").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Text(c.isBoardTask ? "On the Foundry board" : "Where this came from").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             if let quote = c.quote, !quote.isEmpty {
                 QuoteView(quote: quote)
             }
@@ -78,7 +78,7 @@ struct CommitmentDetail: View {
                 EvidenceLabel(commitment: c).font(.callout)
                 Spacer()
                 if let link = c.evidenceLink {
-                    Button("Open \(c.source.label)") { NSWorkspace.shared.open(link) }
+                    Button(c.isBoardTask ? "Open on Board" : "Open \(c.source.label)") { NSWorkspace.shared.open(link) }
                         .controlSize(.small)
                 }
             }
@@ -120,12 +120,14 @@ struct CommitmentDetail: View {
                     }
                 }
             }
-            TextField("For", text: $counterpart, prompt: Text("Who it's for"))
-                .focused($focus, equals: .counterpart)
-                .onSubmit { save() }
-            TextField("Notes", text: $notes, prompt: Text("Anything to remember"), axis: .vertical)
-                .lineLimit(3...10)
-                .focused($focus, equals: .notes)
+            if !c.isBoardTask {
+                TextField("For", text: $counterpart, prompt: Text("Who it's for"))
+                    .focused($focus, equals: .counterpart)
+                    .onSubmit { save() }
+                TextField("Notes", text: $notes, prompt: Text("Anything to remember"), axis: .vertical)
+                    .lineLimit(3...10)
+                    .focused($focus, equals: .notes)
+            }
         }
         .formStyle(.columns)
         .disabled(c.state == .dismissed)
@@ -135,19 +137,21 @@ struct CommitmentDetail: View {
         HStack(spacing: 10) {
             switch c.state {
             case .suggested:
-                Button("Add to my commitments") { model.store.accept(id) }
+                Button("Add to my to-dos") { model.store.accept(id) }
                     .buttonStyle(.borderedProminent)
                 Button("Not mine") { model.store.dismiss(id) }
             case .open:
                 Button("Mark done") { model.complete(id) }
                     .buttonStyle(.borderedProminent)
-                Menu("Snooze") {
-                    ForEach(SnoozeOption.allCases) { o in
-                        Button(o.title) { model.store.snooze(id, until: o.until(from: Date())) }
+                if !c.isBoardTask {
+                    Menu("Snooze") {
+                        ForEach(SnoozeOption.allCases) { o in
+                            Button(o.title) { model.store.snooze(id, until: o.until(from: Date())) }
+                        }
                     }
+                    .fixedSize()
+                    Button("Dismiss") { model.store.dismiss(id) }
                 }
-                .fixedSize()
-                Button("Dismiss") { model.store.dismiss(id) }
             case .done, .dismissed:
                 Button("Reopen") { model.store.reopen(id) }
             }
@@ -172,7 +176,7 @@ struct CommitmentDetail: View {
     }
 
     private func save() {
-        guard loaded, let c = model.store.commitment(id: id) else { return }
+        guard loaded, let c = model.store.commitment(id: id), !c.isBoardTask else { return }
         var patch = CommitmentPatch()
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !t.isEmpty, t != c.title { patch.title = .set(String(t.prefix(200))) }

@@ -22,6 +22,9 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
     var doneAt: Date?
     var createdAt: Date
     var updatedAt: Date
+    /// Board tasks only: the task's own status on the board (TODO, DOING, IN_REVIEW…), kept so
+    /// reopening a ticked task puts it back where it was. Never sent by the commitments API.
+    var boardStatus: String?
 
     enum State: String, Codable, Sendable, CaseIterable {
         case suggested, open, done, dismissed
@@ -34,7 +37,7 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
     }
 
     enum Source: String, Codable, Sendable {
-        case manual, gmail, slack, meeting, calendar, unknown
+        case manual, gmail, slack, meeting, calendar, board, unknown
 
         init(from decoder: Decoder) throws {
             let raw = try decoder.singleValueContainer().decode(String.self)
@@ -48,6 +51,7 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
             case .slack: "Slack"
             case .meeting: "Meeting notes"
             case .calendar: "Calendar"
+            case .board: "Board"
             case .unknown: "Foundry"
             }
         }
@@ -59,6 +63,7 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
             case .slack: "number"
             case .meeting: "text.bubble"
             case .calendar: "calendar"
+            case .board: "rectangle.split.3x1"
             case .unknown: "circle.dotted"
             }
         }
@@ -66,6 +71,11 @@ struct Commitment: Codable, Identifiable, Hashable, Sendable {
 
     var isLocalOnly: Bool { id.hasPrefix(Commitment.localPrefix) }
     static let localPrefix = "local-"
+
+    /// A Foundry board task assigned to you, shown in the same lists as your own to-dos.
+    var isBoardTask: Bool { id.hasPrefix(Commitment.boardPrefix) }
+    static let boardPrefix = "task:"
+    var boardTaskId: String? { isBoardTask ? String(id.dropFirst(Commitment.boardPrefix.count)) : nil }
 
     /// The Foundry host relative links resolve against (meeting notes link to `/app/portal/…`).
     /// Set from `AppEnvironment` at launch.
@@ -136,6 +146,10 @@ struct CommitmentSettings: Codable, Hashable, Sendable {
         }
 
         var symbol: String { Commitment.Source(rawValue: rawValue)?.symbol ?? "circle" }
+
+        /// What this app reads. Email and Slack are NOT read with AI here: what Foundry already
+        /// collects from Slack shows in the Foundry feed instead, with no AI and no credit used.
+        static let offered: [Toggle] = [.meeting, .calendar]
     }
 
     func isOn(_ toggle: Toggle) -> Bool {

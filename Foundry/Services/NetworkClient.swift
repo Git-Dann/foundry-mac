@@ -74,8 +74,13 @@ final class NetworkClient {
             throw AppError.network("Unexpected response from the server.")
         }
         guard (200...299).contains(http.statusCode) else {
-            let message = Self.decodeErrorMessage(from: data)
-                ?? (String(data: data, encoding: .utf8).map { String($0.prefix(300)) } ?? "")
+            // A gateway error is the server restarting (a deploy takes a few seconds). Treat it
+            // like being offline: keep what's cached, send edits later, say nothing alarming.
+            if [502, 503, 504].contains(http.statusCode) {
+                throw AppError.network("Foundry is restarting. Showing what was saved; it'll catch up in a moment.")
+            }
+            // Only Foundry's own JSON message is ever shown. A proxy's HTML page never is.
+            let message = Self.decodeErrorMessage(from: data) ?? "Foundry answered with an error (HTTP \(http.statusCode))."
             throw AppError.http(status: http.statusCode, message: message)
         }
         return data

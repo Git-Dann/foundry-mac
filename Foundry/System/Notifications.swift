@@ -84,7 +84,7 @@ enum NotificationPlan {
                 guard let body = digestBody(due: dueThatDay, overdue: lateBy, review: review) else { continue }
                 plan.append(PlannedNotification(
                     id: idPrefix + "digest." + String(Int(at.timeIntervalSince1970)), kind: .digest, date: at,
-                    title: "Your commitments today", body: body, commitmentId: nil
+                    title: "Your to-dos today", body: body, commitmentId: nil
                 ))
                 if plan.filter({ $0.kind == .digest }).count >= digestDays { break }
             }

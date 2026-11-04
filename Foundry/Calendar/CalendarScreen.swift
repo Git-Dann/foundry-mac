@@ -29,7 +29,7 @@ struct CalendarScreen: View {
         .toolbar {
             ToolbarItem {
                 Button { withAnimation(.easeOut(duration: 0.18)) { inboxShown.toggle() } } label: {
-                    Label(inboxShown ? "Hide Inbox" : "Show Inbox", systemImage: "sidebar.right")
+                    Label(inboxShown ? "Hide No-Date List" : "Show No-Date List", systemImage: "sidebar.right")
                 }
                 .help(inboxShown ? "Hide the inbox" : "Show the inbox")
             }
@@ -150,7 +150,7 @@ private struct WeekGrid: View {
                             .font(.caption.weight(.semibold))
                             .monospacedDigit()
                             .foregroundStyle(.tint)
-                            .help("\(due) commitment\(due == 1 ? "" : "s") due")
+                            .help("\(due) to-do\(due == 1 ? "" : "s") due")
                     }
                 }
                 .padding(.horizontal, 10)
@@ -356,7 +356,7 @@ private struct EventDetail: View {
                 let due = Calendar.current.date(bySettingHour: DueDateParser.defaultHour, minute: 0, second: 0, of: event.end) ?? event.end
                 model.store.add(NewCommitment(title: "Follow up after “\(event.title)”", dueAt: max(due, event.end)))
             } label: {
-                Label("Add a follow-up commitment", systemImage: "plus.circle")
+                Label("Add a follow-up to-do", systemImage: "plus.circle")
             }
             .buttonStyle(.borderless)
         }
@@ -399,37 +399,24 @@ private struct CommitmentBlock: View {
     }
 }
 
-/// What's waiting: suggestions to review, and commitments without a date (drag one onto the
-/// calendar to give it a time).
+/// To-dos without a date. Drag one onto the calendar to give it a time.
 private struct InboxPanel: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let review = CommitmentGrouping.suggestions(model.store.items)
         let undated = model.store.items.filter { $0.state == .open && $0.dueAt == nil }.sorted(by: CommitmentGrouping.order)
         VStack(alignment: .leading, spacing: 0) {
-            Text("Inbox").font(.system(size: 22, weight: .bold)).padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 4)
+            Text("No date yet").font(.system(size: 22, weight: .bold)).padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 4)
             Text("Drag onto the calendar to give it a time.").font(.callout).foregroundStyle(.secondary).padding(.horizontal, 16).padding(.bottom, 8)
-            QuickAddField(prompt: "Add a commitment").padding(.horizontal, 12).padding(.bottom, 6)
+            QuickAddField(prompt: "Add a to-do").padding(.horizontal, 12).padding(.bottom, 6)
+            SuggestionsCard().padding(.horizontal, 12).padding(.bottom, 6)
             List {
-                if undated.isEmpty && review.isEmpty {
+                if undated.isEmpty {
                     Text("Nothing waiting. Everything has a date.").foregroundStyle(.secondary).listRowSeparator(.hidden)
                 }
-                if !undated.isEmpty {
-                    Section("No date") {
-                        ForEach(undated) { c in
-                            CommitmentRow(commitment: c, compact: true)
-                                .draggable(c.id) { Text(c.title).font(.caption).padding(6) }
-                        }
-                    }
-                }
-                if !review.isEmpty {
-                    Section("To review · \(review.count)") {
-                        ForEach(review) { c in
-                            SuggestionRow(commitment: c, compact: true)
-                                .draggable(c.id) { Text(c.title).font(.caption).padding(6) }
-                        }
-                    }
+                ForEach(undated) { c in
+                    CommitmentRow(commitment: c, compact: true)
+                        .draggable(c.id) { Text(c.title).font(.caption).padding(6) }
                 }
             }
             .listStyle(.inset)

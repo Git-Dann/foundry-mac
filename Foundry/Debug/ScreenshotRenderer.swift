@@ -23,8 +23,8 @@ enum ScreenshotRenderer {
             let ap = NSAppearance(named: appearance)!
             render(MenuBarPanel().environment(model), size: nil, width: 360, appearance: ap, to: dir.appending(path: "menubar-\(name).png"))
             render(MainWindow().environment(model), size: CGSize(width: 1180, height: 720), appearance: ap, to: dir.appending(path: "window-\(name).png"), titled: true)
-            model.selection = .suggestions
-            model.selectedCommitmentId = CommitmentGrouping.suggestions(sample).first?.id
+            model.selection = .upcoming
+            model.selectedCommitmentId = sample.first(where: { $0.isBoardTask })?.id
             render(MainWindow().environment(model), size: CGSize(width: 1180, height: 720), appearance: ap, to: dir.appending(path: "window-suggestions-\(name).png"), titled: true)
             model.selection = .today
             model.selectedCommitmentId = sample.first(where: { $0.source == .meeting && $0.state == .open })?.id
@@ -80,6 +80,12 @@ enum SampleData {
                        reason: nil, snoozedUntil: nil, doneAt: state == .done ? now.addingTimeInterval(-3600) : nil,
                        createdAt: now.addingTimeInterval(-200_000), updatedAt: now)
         }
+        func board(_ id: String, _ title: String, due: Date?, client: String, status: String) -> Commitment {
+            Commitment(id: Commitment.boardPrefix + id, title: title, notes: nil, dueAt: due, state: .open, source: .board,
+                       counterpart: client, quote: nil, evidenceLabel: "\(client) board", evidenceUrl: "/app/portal/x/tasks",
+                       evidenceAt: nil, reason: nil, snoozedUntil: nil, doneAt: nil,
+                       createdAt: now.addingTimeInterval(-300_000), updatedAt: now, boardStatus: status)
+        }
         return [
             c("a", "Send Northwind the revised timeline", due: at(-1, 17), source: .gmail, who: "Priya, Northwind",
               quote: "I'll send over the revised timeline by Monday so you can share it with the board.",
@@ -97,6 +103,9 @@ enum SampleData {
             c("s2", "Introduce Sian to the PollenIQ team", due: nil, state: .suggested, source: .gmail, who: "PollenIQ",
               quote: "Happy to introduce you to Sian, who looks after our HR side, later this week.", label: "Re: Onboarding", url: "https://mail.google.com/"),
             c("x", "Send the October invoice", due: at(-2, 12), state: .done),
+            board("t1", "Get Azure resource group access", due: at(0, 17), client: "Campfire", status: "DOING"),
+            board("t2", "Book the handover call with Absurd", due: at(2, 17), client: "Campfire", status: "TODO"),
+            board("t3", "Retry payment flow on Android", due: at(-1, 17), client: "Wedge", status: "IN_REVIEW"),
         ]
     }
 

@@ -214,7 +214,7 @@ final class SourceProblemTests: XCTestCase {
     func testOutOfCreditReadsAsASentence() {
         let s = SourceProblem.plain(credit)
         XCTAssertFalse(s.contains("{"))
-        XCTAssertTrue(s.contains("out of credit"))
+        XCTAssertTrue(s.contains("credit has run out"))
     }
 
     func testOtherJSONErrorsShowOnlyTheirMessage() {
@@ -229,9 +229,11 @@ final class SourceProblemTests: XCTestCase {
     func testSummaryNamesTheFailedSources() {
         let bad = CommitmentSourceStatus(ok: false, message: credit, at: nil)
         let good = CommitmentSourceStatus(ok: true, message: "40 open action items", at: nil)
-        let s = SourceProblem.summary(["gmail": bad, "slack": bad, "meeting": good])!
-        XCTAssertTrue(s.hasPrefix("Sent email and Slack couldn't be read."), s)
-        XCTAssertTrue(s.contains("out of credit"))
+        let s = SourceProblem.summary(["meeting": bad, "calendar": bad])!
+        XCTAssertTrue(s.hasPrefix("Meeting notes and Calendar are paused."), s)
+        XCTAssertTrue(s.contains("credit has run out"))
         XCTAssertNil(SourceProblem.summary(["meeting": good]))
+        // Email and Slack aren't read by this app any more, so their old failures never show.
+        XCTAssertNil(SourceProblem.summary(["gmail": bad, "slack": bad, "meeting": good]))
     }
 }

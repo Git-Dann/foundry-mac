@@ -11,6 +11,10 @@ protocol CommitmentsService: Sendable {
     func delete(id: String) async throws
     func sync() async throws -> CommitmentSyncResult
     func updateSettings(_ settings: CommitmentSettings) async throws -> CommitmentSettings
+    /// Board tasks assigned to this person (`GET /api/tasks?assigneeId=`).
+    func boardTasks(assigneeId: String) async throws -> [BoardTaskDTO]
+    /// Ticks, reopens or re-dates a board task (`PATCH /api/tasks/<id>`). `dueDate` is a day.
+    func updateBoardTask(id: String, status: String?, dueDate: CommitmentPatch.Field<String>?) async throws -> BoardTaskDTO
 }
 
 /// Talks to `https://foundry.gitwork.co.uk/api/backstage/commitments` with the person's Bearer JWT.
@@ -67,6 +71,39 @@ struct CommitmentsAPI: CommitmentsService {
         ], options: [.sortedKeys])
         let r: SettingsEnvelope = try await network.execute(try await request("/settings", method: "PUT", body: body))
         return r.settings
+    }
+}
+
+extension CommitmentsAPI {
+    private func tasksRequest(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil) async throws -> APIRequest {
+        guard let token = await token() else { throw AppError.notAuthenticated }
+        var url = await baseURL().appending(path: "api/tasks" + path)
+        if !query.isEmpty { url.append(queryItems: query) }
+        return APIRequest(
+            url: url,
+            method: method,
+            headers: ["Authorization": "Bearer \(token)", "Accept": "application/json"],
+            body: body
+        )
+    }
+
+    func boardTasks(assigneeId: String) async throws -> [BoardTaskDTO] {
+        try await network.execute(try await tasksRequest("", query: [
+            URLQueryItem(name: "assigneeId", value: assigneeId),
+            URLQueryItem(name: "doneWithinDays", value: "14"),
+        ]))
+    }
+
+    func updateBoardTask(id: String, status: String?, dueDate: CommitmentPatch.Field<String>?) async throws -> BoardTaskDTO {
+        var body: [String: Any] = [:]
+        if let status { body["status"] = status }
+        switch dueDate {
+        case .set(let day): body["dueDate"] = day
+        case .clear: body["dueDate"] = NSNull()
+        case nil: break
+        }
+        let data = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+        return try await network.execute(try await tasksRequest("/\(id.urlPathSafe)", method: "PATCH", body: data))
     }
 }
 

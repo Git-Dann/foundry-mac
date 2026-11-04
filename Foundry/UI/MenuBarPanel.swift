@@ -6,7 +6,6 @@ struct MenuBarPanel: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
-    @State private var showAllReview = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,6 +13,7 @@ struct MenuBarPanel: View {
                 header
                 VStack(spacing: 8) {
                     QuickAddField()
+                    SuggestionsCard()
                     UndoBar()
                 }
                 .padding(.horizontal, 12)
@@ -36,7 +36,7 @@ struct MenuBarPanel: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Commitments").font(.headline)
+            Text("To-dos").font(.headline)
             Spacer()
             if model.store.isRefreshing || model.store.isCheckingSources {
                 ProgressView().controlSize(.small)
@@ -56,11 +56,10 @@ struct MenuBarPanel: View {
     private var list: some View {
         let now = Date()
         let sections = CommitmentGrouping.sections(model.store.items, now: now, include: [.overdue, .today, .next7, .later, .noDate])
-        let review = CommitmentGrouping.suggestions(model.store.items)
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                if sections.isEmpty && review.isEmpty {
-                    Text(model.store.loadedAt == nil ? "Loading your commitments…" : "Nothing promised. A good day.")
+                if sections.isEmpty {
+                    Text(model.store.loadedAt == nil ? "Loading your to-dos…" : "Nothing to do. A good day.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 28)
@@ -70,21 +69,6 @@ struct MenuBarPanel: View {
                     ForEach(section.items) { c in
                         CommitmentRow(commitment: c, compact: true)
                             .padding(.horizontal, 12)
-                    }
-                }
-                if !review.isEmpty {
-                    SectionHeader(title: "\(review.count) to review", count: nil, tint: .accentColor)
-                    ForEach(showAllReview ? review : Array(review.prefix(3))) { c in
-                        SuggestionRow(commitment: c, compact: true)
-                            .padding(.horizontal, 14)
-                        Divider().padding(.leading, 14)
-                    }
-                    if review.count > 3 && !showAllReview {
-                        Button("Show all \(review.count)") { showAllReview = true }
-                            .buttonStyle(.borderless)
-                            .font(.callout)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
                     }
                 }
             }
@@ -172,10 +156,10 @@ struct SignInPrompt: View {
             Image(systemName: "checklist")
                 .font(.system(size: compact ? 28 : 44, weight: .light))
                 .foregroundStyle(.tint)
-            Text("Your commitments, in one calm list")
+            Text("Your to-dos and your Foundry work, in one list")
                 .font(compact ? .headline : .title2.weight(.semibold))
                 .multilineTextAlignment(.center)
-            Text("The promises you've made in email, Slack, meetings and your calendar. Foundry suggests; you decide. Nothing is ever sent for you.")
+            Text("Your own to-dos beside the board tasks assigned to you, with your calendar. Foundry may suggest the odd thing from your meetings; nothing is added or sent without you.")
                 .font(compact ? .callout : .body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

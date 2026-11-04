@@ -82,6 +82,12 @@ final class CommitmentStore {
     private(set) var outbox: [PendingOperation] = []
     var pendingCount: Int { outbox.count }
 
+    /// Board tasks assigned to you, as last read. Kept apart so a failed board read leaves the
+    /// last good list in place rather than emptying it.
+    @ObservationIgnored private var boardItems: [Commitment] = []
+    /// Set when the board couldn't be read; your own to-dos still show.
+    private(set) var boardProblem: String?
+
     @ObservationIgnored private var service: CommitmentsService
     @ObservationIgnored private let cache: CommitmentCache
     @ObservationIgnored private var userId: String?
@@ -165,9 +171,34 @@ final class CommitmentStore {
         isOffline = false
         settings = response.settings
         loadedAt = now()
-        items = Self.reconcile(server: response.commitments, outbox: outbox, now: now())
+        await loadBoard()
+        if settings.gmailEnabled || settings.slackEnabled {
+            // The AI read of email and Slack is retired in this app (it cost credit for things
+            // Foundry already collects). Switch it off so the server stops trying too.
+            var off = settings
+            off.gmailEnabled = false
+            off.slackEnabled = false
+            if let saved = try? await service.updateSettings(off) { settings = saved } else { settings = off }
+        }
+        items = Self.reconcile(server: response.commitments + boardItems, outbox: outbox, now: now())
         if lastError?.hasPrefix("Couldn't reach") == true { lastError = nil }
         persistAndNotify()
+    }
+
+    private func loadBoard() async {
+        guard let userId, !userId.isEmpty else { return }
+        do {
+            let tasks = try await service.boardTasks(assigneeId: userId)
+            let at = now()
+            boardItems = tasks.filter { BoardTasks.isRelevant($0, for: userId, now: at) }
+                .map { BoardTasks.commitment($0, webPath: BoardTasks.path) }
+            boardProblem = nil
+        } catch let error as AppError where error.isUnauthorized {
+            onUnauthorized?()
+        } catch {
+            if boardItems.isEmpty { boardItems = items.filter(\.isBoardTask) }
+            boardProblem = "Your Foundry board tasks couldn't be read just now."
+        }
     }
 
     /// When the last read is over this old, opening or refreshing the app reads the sources.
@@ -235,7 +266,11 @@ final class CommitmentStore {
     func reopen(_ id: String) { update(id, CommitmentPatch(state: .open, snoozedUntil: .clear)) }
     func accept(_ id: String) { update(id, CommitmentPatch(state: .open)) }
     func dismiss(_ id: String) { update(id, CommitmentPatch(state: .dismissed)) }
-    func snooze(_ id: String, until: Date) { update(id, CommitmentPatch(snoozedUntil: .set(until))) }
+    func snooze(_ id: String, until: Date) {
+        // A board task's date belongs to the board; snoozing it would only hide it here.
+        guard commitment(id: id)?.isBoardTask != true else { return }
+        update(id, CommitmentPatch(snoozedUntil: .set(until)))
+    }
     func unsnooze(_ id: String) { update(id, CommitmentPatch(snoozedUntil: .clear)) }
 
     /// Only ones the person typed in can be deleted; suggestions are dismissed so they aren't
@@ -335,7 +370,25 @@ final class CommitmentStore {
                     replaceLocalId(localId, with: saved)
                 case .update(let id, let patch):
                     guard !id.hasPrefix(Commitment.localPrefix) else { break }
-                    let saved = try await service.update(id: id, patch)
+                    let saved: Commitment
+                    if let taskId = id.hasPrefix(Commitment.boardPrefix) ? String(id.dropFirst(Commitment.boardPrefix.count)) : nil {
+                        let current = items.first { $0.id == id }
+                        let status = patch.state.flatMap { BoardTasks.status(for: $0, previous: current?.boardStatus) }
+                        let due: CommitmentPatch.Field<String>? = patch.dueAt.map {
+                            if case .set(let d) = $0 { .set(BoardTasks.dueDate(d)) } else { .clear }
+                        }
+                        guard status != nil || due != nil else { break }
+                        var task = BoardTasks.commitment(
+                            try await service.updateBoardTask(id: taskId, status: status, dueDate: due),
+                            webPath: BoardTasks.path
+                        )
+                        // Reopening must remember where it came from, not "DONE".
+                        if task.boardStatus == "DONE", let prev = current?.boardStatus, prev != "DONE" { task.boardStatus = prev }
+                        saved = task
+                        if let b = boardItems.firstIndex(where: { $0.id == id }) { boardItems[b] = saved }
+                    } else {
+                        saved = try await service.update(id: id, patch)
+                    }
                     // Keep later local edits if any were made while this was in flight.
                     if !outbox.dropFirst().contains(where: { $0.targetId == id }),
                        let i = items.firstIndex(where: { $0.id == id }) {
@@ -379,7 +432,7 @@ final class CommitmentStore {
         if let appError = error as? AppError {
             if appError.isUnauthorized { onUnauthorized?(); return }
             if case .http(404, _) = appError {
-                lastError = "Commitments aren't on this Foundry server yet."
+                lastError = "To-dos aren't on this Foundry server yet."
                 return
             }
             if case .network = appError {
