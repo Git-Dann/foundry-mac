@@ -19,6 +19,17 @@ struct FeedView: View {
                 .padding(.vertical, 18)
                 .listRowSeparator(.hidden)
             }
+            if !feed.mail.isEmpty {
+                Section("Email · unread this week") {
+                    ForEach(feed.mail) { MailRow(item: $0) }
+                }
+            } else if let problem = feed.mailProblem, !problem.isEmpty {
+                Section("Email") {
+                    Label(problem, systemImage: "envelope.badge.shield.half.filled")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                }
+            }
             if !mentions.isEmpty {
                 Section("Mentioned you") {
                     ForEach(mentions) { FeedRow(item: $0) }
@@ -34,7 +45,7 @@ struct FeedView: View {
         .contentMargins(.vertical, 12, for: .scrollContent)
         // Messages arrive after the list first lays out; a List keeps the row heights it measured
         // for the earlier content, which overlapped rows. Re-lay out when the feed changes.
-        .id(feed.items.map(\.id))
+        .id(feed.items.map(\.id) + feed.mail.map(\.id))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let problem = feed.problem {
                 SourceFootnote(text: problem)
@@ -46,7 +57,7 @@ struct FeedView: View {
             }
         }
         .navigationTitle("Foundry")
-        .navigationSubtitle("From your client Slack channels · no AI")
+        .navigationSubtitle("Your unread email and client Slack · no AI")
         .toolbar {
             ToolbarItem {
                 Button { Task { await feed.refresh(force: true) } } label: {
@@ -106,6 +117,51 @@ struct FeedRow: View {
             if let link = item.link { Button("Open in Slack") { NSWorkspace.shared.open(link) } }
             Divider()
             Button("Clear") { model.feed.clear(item.id) }
+        }
+    }
+}
+
+struct MailRow: View {
+    @Environment(AppModel.self) private var model
+    let item: MailItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(item.fromName).fontWeight(.semibold).lineLimit(1)
+                if let d = item.date {
+                    Text(d.formatted(.relative(presentation: .named))).foregroundStyle(.tertiary)
+                }
+                Spacer(minLength: 6)
+                if let url = item.url {
+                    Button("Open in Gmail", systemImage: "arrow.up.right.square") { NSWorkspace.shared.open(url) }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .help("Open in Gmail")
+                }
+                Button("Make a to-do") {
+                    model.store.add(NewCommitment(title: item.suggestedToDo, notes: item.url.map { "[Open the email](\($0.absoluteString))" }, counterpart: item.fromName))
+                    model.feed.clearMail(item.id)
+                }
+                .buttonStyle(.glass)
+                .controlSize(.small)
+            }
+            .font(.callout)
+            Text(item.subject).lineLimit(1)
+            Text(item.snippet)
+                .lineLimit(2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 8)
+        .contextMenu {
+            Button("Make a To-do") {
+                model.store.add(NewCommitment(title: item.suggestedToDo, counterpart: item.fromName))
+                model.feed.clearMail(item.id)
+            }
+            if let url = item.url { Button("Open in Gmail") { NSWorkspace.shared.open(url) } }
+            Divider()
+            Button("Clear") { model.feed.clearMail(item.id) }
         }
     }
 }

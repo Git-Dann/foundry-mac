@@ -54,3 +54,12 @@ final class DisplayTests: XCTestCase {
         XCTAssertEqual(Display.lines(for: c("Send the deck")).title, "Send the deck")
     }
 }
+
+final class MailItemTests: XCTestCase {
+    func testMailDecodesAndBecomesAReplyToDo() throws {
+        let json = #"{"connected":true,"messages":[{"id":"m1","threadId":"t1","fromName":"Luke McFarland","fromEmail":"luke@bigwedgegolf.com","subject":"Course list for Q1","snippet":"Can you check…","date":"2026-11-04T10:00:00.000Z","unread":true,"link":"https://mail.google.com/mail/?authuser=dan%40gitwork.co.uk#all/t1"}]}"#
+        let box = try JSONDecoder.foundry.decode(MailInboxDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(box.messages.first?.suggestedToDo, "Reply to Luke McFarland: Course list for Q1")
+        XCTAssertEqual(box.messages.first?.url?.host, "mail.google.com")
+    }
+}

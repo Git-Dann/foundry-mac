@@ -27,6 +27,29 @@ struct FeedItem: Identifiable, Hashable, Sendable {
     }
 }
 
+/// An unread email in your primary inbox, from `/api/backstage/mail/inbox` (headers and
+/// Gmail's snippet only; nothing is stored).
+struct MailItem: Identifiable, Hashable, Sendable, Decodable {
+    var id: String
+    var threadId: String
+    var fromName: String
+    var fromEmail: String
+    var subject: String
+    var snippet: String
+    var date: Date?
+    var unread: Bool
+    var link: String
+
+    var url: URL? { Commitment.link(link, base: Commitment.webBase) }
+    var suggestedToDo: String { "Reply to \(fromName): \(FeedItem.clip(subject, to: 70))" }
+}
+
+struct MailInboxDTO: Decodable, Sendable {
+    var connected: Bool
+    var reason: String?
+    var messages: [MailItem]
+}
+
 /// Wire shapes (camelCase, as is).
 struct DeskMessageDTO: Decodable, Sendable {
     var id: String
@@ -86,6 +109,9 @@ enum FeedRules {
 @Observable
 final class FoundryFeedStore {
     private(set) var items: [FeedItem] = []
+    private(set) var mail: [MailItem] = []
+    /// Nil while mail can't be shown for a reason worth saying; empty string hides the section.
+    private(set) var mailProblem: String?
     private(set) var problem: String?
     private(set) var isLoading = false
     private(set) var loadedAt: Date?
@@ -120,6 +146,9 @@ final class FoundryFeedStore {
         }
         async let m: DeskMentionsDTO = network.execute(req("mentions"))
         async let s: DeskSlackDTO = network.execute(req("slack"))
+        async let inbox: MailInboxDTO = network.execute(
+            APIRequest(url: base.appending(path: "api/backstage/mail/inbox"), headers: ["Authorization": "Bearer \(token)", "Accept": "application/json"])
+        )
         var notes: [String] = []
         do {
             let mentions = try await m
@@ -131,9 +160,29 @@ final class FoundryFeedStore {
             raw.messages = slack.messages
             if !slack.configured { notes.append("Slack isn't connected to Foundry.") }
         } catch { notes.append("Client Slack channels couldn't be read just now.") }
+        do {
+            let box = try await inbox
+            mail = box.messages.filter { !clearedMail.contains($0.id) }
+            mailProblem = box.connected ? nil : (box.reason ?? "Your Gmail couldn't be read.")
+        } catch let error as AppError {
+            if case .http(404, _) = error { mailProblem = "" } else { mailProblem = "Your Gmail couldn't be read just now." }
+        } catch {
+            mailProblem = "Your Gmail couldn't be read just now."
+        }
         problem = notes.isEmpty ? nil : notes.joined(separator: " ")
         loadedAt = Date()
         rebuild(base: base)
+    }
+
+    private static let clearedMailKey = "feed.clearedMail.v1"
+    private var clearedMail: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: Self.clearedMailKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue.suffix(500)), forKey: Self.clearedMailKey) }
+    }
+
+    func clearMail(_ id: String) {
+        clearedMail.insert(id)
+        mail.removeAll { $0.id == id }
     }
 
     func clear(_ id: String) {
