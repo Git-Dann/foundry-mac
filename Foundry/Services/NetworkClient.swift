@@ -20,7 +20,8 @@ struct APIRequest {
 /// Thin async/await wrapper over `URLSession`. Mirrors the iOS app's `NetworkClient` so the
 /// Mac client behaves identically against the live API, with richer error surfacing (it
 /// extracts the API's `{ "error": "…" }` message and preserves the HTTP status for 401 handling).
-final class NetworkClient {
+/// `Sendable`: its only state is an immutable `URLSession`, which is itself `Sendable`.
+final class NetworkClient: Sendable {
     private let session: URLSession
 
     init(session: URLSession = .shared) {

@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// What the app will notify about. Two kinds only, by design: one morning digest, and a nudge
 /// when something becomes overdue. A new suggestion never pings; it waits in the review list.
@@ -115,7 +115,7 @@ enum NotificationPlan {
 /// a completed or snoozed commitment never nudges.
 @MainActor
 final class NotificationScheduler: NSObject, UNUserNotificationCenterDelegate {
-    static let overdueCategory = "commitment.overdue"
+    nonisolated static let overdueCategory = "commitment.overdue"
     static let completeAction = "commitment.complete"
     static let snoozeAction = "commitment.snooze"
 

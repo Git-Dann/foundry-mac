@@ -141,7 +141,7 @@ final class FoundryFeedStore {
         isLoading = true
         defer { isLoading = false }
         let base = await baseURL()
-        func req(_ path: String) -> APIRequest {
+        @Sendable func req(_ path: String) -> APIRequest {
             APIRequest(url: base.appending(path: "api/desk/" + path), headers: ["Authorization": "Bearer \(token)", "Accept": "application/json"])
         }
         async let m: DeskMentionsDTO = network.execute(req("mentions"))
