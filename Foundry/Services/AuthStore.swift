@@ -11,7 +11,7 @@ import Observation
 @MainActor
 @Observable
 final class AuthStore {
-    static let tokenKey = "auth.mobileJWT"
+    nonisolated static let tokenKey = "auth.mobileJWT"
 
     /// One Keychain slot per server. Production keeps the original slot; any other host (a
     /// preview or local server) gets its own, so a 401 from one server can never sign you out

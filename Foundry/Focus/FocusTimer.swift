@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// The arithmetic of one timed block, kept free of clocks and storage so it can be tested.
 /// Time spent paused is not counted, so the end moves later by however long it was paused.
